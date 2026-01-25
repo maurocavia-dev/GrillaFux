@@ -1,0 +1,16 @@
+name: GrillaFux
+options:
+  bundleIdPrefix: com.basquetpass
+targets:
+  GrillaFux:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources: [GrillaFux]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.basquetpass.logistica
+        MARKETING_VERSION: 1.0
+        CURRENT_PROJECT_VERSION: 1
+        DEVELOPMENT_TEAM: "" # Will be set by signing
+        CODE_SIGN_STYLE: Manual
