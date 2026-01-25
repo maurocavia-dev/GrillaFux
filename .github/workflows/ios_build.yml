@@ -13,11 +13,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
+      - name: Install Mint & XcodeGen
+        run: |
+          brew install mint
+          mint install yonaskolb/xcodegen
+          
       - name: Generate Xcode Project
-        run: xcodegen generate
+        run: mint run xcodegen generate
 
       # 🔑 REGLA DE ORO: El primer xcodebuild DEBE ser -resolvePackageDependencies
       - name: Resolve Package Dependencies (FIRST)
@@ -40,7 +42,7 @@ jobs:
       - name: Install Provisioning Profile (Moved after resolution)
         run: |
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo -n "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision"
+          echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | tr -d '\n' | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision"
           
           # ✅ Validación de seguridad del perfil
           echo "Validando perfil de provisión..."
@@ -51,12 +53,13 @@ jobs:
             exit 1
           fi
 
-      - name: Debug SPM Resolution
+      - name: Debug SPM Resolution (The Proof)
         run: |
-          echo "Verificando estructura de SPM en el proyecto..."
-          ls -la GrillaFux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm || echo "SPM data folder not found - potentially critical"
+          echo "Buscando rastro de SwiftPM para confirmar inicialización..."
+          find . -name "*swiftpm*" -type d
+          ls -la GrillaFux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm 2>/dev/null || echo "⚠️ Carpeta swiftpm no encontrada en el workspace"
 
-      - name: Build iOS App (Archive V24)
+      - name: Build iOS App (Archive V27)
         run: |
           xcodebuild archive \
             -project GrillaFux.xcodeproj \
