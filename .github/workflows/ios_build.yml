@@ -21,7 +21,9 @@ jobs:
       - name: Generate Xcode Project
         run: mint run xcodegen generate
 
-
+      # 🚫 Eliminado paso separado de resolución. Confiamos en "One Shot" Archive.
+      - name: Clean DerivedData
+        run: rm -rf ~/Library/Developer/Xcode/DerivedData
 
       - name: Install Apple Certificate
         uses: apple-actions/import-codesign-certs@v2
@@ -49,7 +51,7 @@ jobs:
           find . -name "*swiftpm*" -type d
           ls -la GrillaFux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm 2>/dev/null || echo "⚠️ Carpeta swiftpm no encontrada en el workspace"
 
-      - name: Build iOS App (Archive V31 PostGen)
+      - name: Build iOS App (Archive V29)
         run: |
           xcodebuild archive \
             -project GrillaFux.xcodeproj \
@@ -71,4 +73,3 @@ jobs:
         with:
           name: GrillaFux.ipa
           path: build/output/*.ipa
-
