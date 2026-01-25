@@ -19,16 +19,17 @@ jobs:
       - name: Generate Xcode Project
         run: xcodegen generate
 
-      - name: Resolve Package Dependencies (Warmup)
+      # 🔑 REGLA DE ORO: El primer xcodebuild DEBE ser -resolvePackageDependencies
+      - name: Resolve Package Dependencies (FIRST)
         run: |
-          # Forzamos la descarga y resolución limpia
+          # Limpia profunda previa
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+          rm -rf "$PWD/.spm"
+          
           xcodebuild -resolvePackageDependencies \
             -project GrillaFux.xcodeproj \
             -scheme GrillaFux \
             -clonedSourcePackagesDirPath "$PWD/.spm"
-          
-          # Pequeño delay de sincronización
-          sleep 10
 
       - name: Install Apple Certificate
         uses: apple-actions/import-codesign-certs@v2
@@ -36,7 +37,7 @@ jobs:
           p12-file-base64: ${{ secrets.P12_BASE64 }}
           p12-password: ${{ secrets.P12_PASSWORD }}
 
-      - name: Install Provisioning Profile
+      - name: Install Provisioning Profile (Moved after resolution)
         run: |
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           echo -n "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision"
@@ -50,17 +51,21 @@ jobs:
             exit 1
           fi
 
-      - name: Build iOS App (Archive V22)
+      - name: Debug SPM Resolution
         run: |
-          xcodebuild \
+          echo "Verificando estructura de SPM en el proyecto..."
+          ls -la GrillaFux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm || echo "SPM data folder not found - potentially critical"
+
+      - name: Build iOS App (Archive V24)
+        run: |
+          xcodebuild archive \
             -project GrillaFux.xcodeproj \
             -scheme GrillaFux \
             -sdk iphoneos \
             -configuration Release \
             -archivePath "$PWD/build/GrillaFux.xcarchive" \
             -clonedSourcePackagesDirPath "$PWD/.spm" \
-            -skipPackagePluginValidation \
-            clean archive
+            -skipPackagePluginValidation
 
       - name: Export IPA
         run: |
