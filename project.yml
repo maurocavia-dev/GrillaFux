@@ -7,6 +7,15 @@ targets:
     platform: iOS
     deploymentTarget: "15.0"
     sources: [GrillaFux]
+    info:
+      path: GrillaFux/Info.plist
+      properties:
+        CFBundleDisplayName: Grilla Fux
+        UILaunchStoryboardName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.basquetpass.logistica
@@ -15,3 +24,4 @@ targets:
         DEVELOPMENT_TEAM: ZY8K4XH28N
         CODE_SIGN_STYLE: Manual
         PROVISIONING_PROFILE_SPECIFIER: "GrillaFux Distribution"
+        GENERATE_INFOPLIST_FILE: YES
