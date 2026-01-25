@@ -19,11 +19,16 @@ jobs:
       - name: Generate Xcode Project
         run: xcodegen generate
 
-      - name: Resolve Package Dependencies
+      - name: Resolve Package Dependencies (Warmup)
         run: |
+          # Forzamos la descarga y resolución limpia
           xcodebuild -resolvePackageDependencies \
             -project GrillaFux.xcodeproj \
-            -scheme GrillaFux
+            -scheme GrillaFux \
+            -clonedSourcePackagesDirPath "$PWD/.spm"
+          
+          # Pequeño delay de sincronización
+          sleep 10
 
       - name: Install Apple Certificate
         uses: apple-actions/import-codesign-certs@v2
@@ -45,7 +50,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build iOS App (Archive V21)
+      - name: Build iOS App (Archive V22)
         run: |
           xcodebuild \
             -project GrillaFux.xcodeproj \
@@ -53,6 +58,7 @@ jobs:
             -sdk iphoneos \
             -configuration Release \
             -archivePath "$PWD/build/GrillaFux.xcarchive" \
+            -clonedSourcePackagesDirPath "$PWD/.spm" \
             -skipPackagePluginValidation \
             clean archive
 
