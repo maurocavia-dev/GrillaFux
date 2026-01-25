@@ -26,12 +26,10 @@ jobs:
         run: |
           # Limpia profunda previa
           rm -rf ~/Library/Developer/Xcode/DerivedData
-          rm -rf "$PWD/.spm"
           
           xcodebuild -resolvePackageDependencies \
             -project GrillaFux.xcodeproj \
-            -scheme GrillaFux \
-            -clonedSourcePackagesDirPath "$PWD/.spm"
+            -scheme GrillaFux
 
       - name: Install Apple Certificate
         uses: apple-actions/import-codesign-certs@v2
@@ -59,7 +57,7 @@ jobs:
           find . -name "*swiftpm*" -type d
           ls -la GrillaFux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm 2>/dev/null || echo "⚠️ Carpeta swiftpm no encontrada en el workspace"
 
-      - name: Build iOS App (Archive V27)
+      - name: Build iOS App (Archive V29)
         run: |
           xcodebuild archive \
             -project GrillaFux.xcodeproj \
@@ -67,7 +65,6 @@ jobs:
             -sdk iphoneos \
             -configuration Release \
             -archivePath "$PWD/build/GrillaFux.xcarchive" \
-            -clonedSourcePackagesDirPath "$PWD/.spm" \
             -skipPackagePluginValidation
 
       - name: Export IPA
