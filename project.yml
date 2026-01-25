@@ -1,6 +1,10 @@
 name: GrillaFux
 options:
   bundleIdPrefix: com.basquetpass
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk.git
+    from: 10.0.0
 targets:
   GrillaFux:
     type: application
@@ -16,6 +20,11 @@ targets:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+    dependencies:
+      - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
+        product: FirebaseMessaging
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.basquetpass.logistica
