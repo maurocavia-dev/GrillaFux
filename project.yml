@@ -13,13 +13,6 @@ targets:
     sources: [GrillaFux]
     info:
       path: GrillaFux/Info.plist
-      properties:
-        CFBundleDisplayName: Grilla Fux
-        UILaunchStoryboardName: ""
-        UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationPortrait
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
     dependencies:
       - package: Firebase
         product: FirebaseCore
@@ -31,9 +24,6 @@ targets:
         MARKETING_VERSION: 1.0
         CURRENT_PROJECT_VERSION: 1
         DEVELOPMENT_TEAM: ZY8K4XH28N
-        CODE_SIGN_STYLE: Manual
-        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO
         SWIFT_VERSION: 5.7
-        # Disable signing for EVERYTHING by default in this project
-        CODE_SIGNING_ALLOWED: NO
-        CODE_SIGNING_REQUIRED: NO
