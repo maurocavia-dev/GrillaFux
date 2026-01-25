@@ -1,8 +1,4 @@
 name: GrillaFux
-
-# 🔥 Post-Generation Hook: Resolve dependencies immediately
-postGenCommand: |
-  xcodebuild -resolvePackageDependencies -project GrillaFux.xcodeproj -scheme GrillaFux
 options:
   bundleIdPrefix: com.basquetpass
 packages:
@@ -25,8 +21,6 @@ targets:
     entitlements:
       path: GrillaFux/GrillaFux.entitlements
     dependencies:
-      - package: Firebase
-        product: FirebaseCore
       - package: Firebase
         product: FirebaseMessaging
     settings:
