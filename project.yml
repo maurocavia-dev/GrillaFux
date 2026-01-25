@@ -5,6 +5,13 @@ packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk.git
     from: 10.0.0
+# Configuración a nivel de PROYECTO (Desactivamos firma para dependencias/SPM)
+settings:
+  base:
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGN_IDENTITY: ""
+    AD_HOC_CODE_SIGNING_ALLOWED: NO
 targets:
   GrillaFux:
     type: application
@@ -13,6 +20,8 @@ targets:
     sources: [GrillaFux]
     info:
       path: GrillaFux/Info.plist
+    entitlements:
+      path: GrillaFux/GrillaFux.entitlements
     dependencies:
       - package: Firebase
         product: FirebaseCore
@@ -25,5 +34,8 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         DEVELOPMENT_TEAM: ZY8K4XH28N
         CODE_SIGN_STYLE: Automatic
-        GENERATE_INFOPLIST_FILE: NO
         SWIFT_VERSION: 5.7
+        CODE_SIGN_ENTITLEMENTS: GrillaFux/GrillaFux.entitlements
+        # 🔑 Override para la app (Forzamos firma solo para este Target)
+        CODE_SIGNING_ALLOWED: YES
+        CODE_SIGNING_REQUIRED: YES
