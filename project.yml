@@ -34,3 +34,4 @@ targets:
         CODE_SIGN_STYLE: Manual
         PROVISIONING_PROFILE_SPECIFIER: "GrillaFux Distribution"
         GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: 5.0
