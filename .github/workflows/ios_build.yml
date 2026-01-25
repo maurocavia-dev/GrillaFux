@@ -52,7 +52,7 @@ jobs:
             -exportPath $PWD/build/output
 
       - name: Upload IPA
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: GrillaFux.ipa
           path: build/output/GrillaFux.ipa
