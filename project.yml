@@ -18,6 +18,11 @@ targets:
     sources: [GrillaFux]
     info:
       path: GrillaFux/Info.plist
+      properties:
+        CFBundleIconName: AppIcon
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        "UISupportedInterfaceOrientations~ipad": [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
     entitlements:
       path: GrillaFux/GrillaFux.entitlements
     dependencies:
