@@ -21,15 +21,9 @@ jobs:
       - name: Generate Xcode Project
         run: mint run xcodegen generate
 
-      # 🔑 REGLA DE ORO: El primer xcodebuild DEBE ser -resolvePackageDependencies
-      - name: Resolve Package Dependencies (FIRST)
-        run: |
-          # Limpia profunda previa
-          rm -rf ~/Library/Developer/Xcode/DerivedData
-          
-          xcodebuild -resolvePackageDependencies \
-            -project GrillaFux.xcodeproj \
-            -scheme GrillaFux
+      # 🚫 Eliminado paso separado de resolución. Confiamos en "One Shot" Archive.
+      - name: Clean DerivedData
+        run: rm -rf ~/Library/Developer/Xcode/DerivedData
 
       - name: Install Apple Certificate
         uses: apple-actions/import-codesign-certs@v2
@@ -79,3 +73,4 @@ jobs:
         with:
           name: GrillaFux.ipa
           path: build/output/*.ipa
+
