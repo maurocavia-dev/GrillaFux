@@ -4,7 +4,7 @@ options:
 packages:
   Firebase:
     url: https://github.com/firebase/firebase-ios-sdk.git
-    exact: 10.28.1
+    from: 10.28.1
 # Configuración a nivel de PROYECTO (Desactivamos firma para dependencias/SPM)
 settings:
   base:
@@ -43,3 +43,4 @@ targets:
         CODE_SIGNING_ALLOWED: YES
         CODE_SIGNING_REQUIRED: YES
         CODE_SIGN_IDENTITY: "Apple Distribution"
+
