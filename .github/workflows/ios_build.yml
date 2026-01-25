@@ -73,3 +73,33 @@ jobs:
         with:
           name: GrillaFux.ipa
           path: build/output/*.ipa
+
+      - name: Upload to TestFlight 🚀
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          # 1. Crear directorio para claves privadas
+          mkdir -p ~/.private_keys
+          
+          # 2. Decodificar/Guardar la clave privada
+          # Asumimos que el secreto es el texto plano del p8 o base64
+          # Si el usuario copio el texto tal cual de Apple:
+          echo "$API_KEY_BASE64" > ~/.private_keys/AuthKey_$API_KEY_ID.p8
+          
+          echo "Subiendo a TestFlight..."
+          
+          # 3. Validar antes de subir (Optional but good)
+          xcrun altool --validate-app \
+            --type ios \
+            --file "$PWD/build/output/GrillaFux.ipa" \
+            --apiKey "$API_KEY_ID" \
+            --apiIssuer "$ISSUER_ID"
+            
+          # 4. Subir la App
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$PWD/build/output/GrillaFux.ipa" \
+            --apiKey "$API_KEY_ID" \
+            --apiIssuer "$ISSUER_ID"
