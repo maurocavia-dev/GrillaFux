@@ -26,11 +26,9 @@ jobs:
           p12-password: ${{ secrets.P12_PASSWORD }}
           
       - name: Install Provisioning Profile
-        uses: apple-actions/download-provisioning-profiles@v1
-        with:
-          bundle-id: com.basquetpass.logistica
-          profile-type: IOS_APP_STORE
-          ignore-profile-type-error: true
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp GrillaFux_Distribution.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
           
       - name: Build iOS App
         run: |
