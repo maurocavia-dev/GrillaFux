@@ -45,7 +45,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build iOS App (Archive Signed V20)
+      - name: Build iOS App (Archive V21)
         run: |
           xcodebuild \
             -project GrillaFux.xcodeproj \
@@ -53,10 +53,6 @@ jobs:
             -sdk iphoneos \
             -configuration Release \
             -archivePath "$PWD/build/GrillaFux.xcarchive" \
-            CODE_SIGN_STYLE=Manual \
-            PROVISIONING_PROFILE_SPECIFIER="GrillaFux Distribution" \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM=ZY8K4XH28N \
             -skipPackagePluginValidation \
             clean archive
 
