@@ -21,7 +21,6 @@ jobs:
 
       - name: Resolve Package Dependencies
         run: |
-          rm -rf ~/Library/Developer/Xcode/DerivedData
           xcodebuild -resolvePackageDependencies \
             -project GrillaFux.xcodeproj \
             -scheme GrillaFux
@@ -35,20 +34,30 @@ jobs:
       - name: Install Provisioning Profile
         run: |
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > \
-          "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision"
+          echo -n "${{ secrets.MOBILEPROVISION_BASE64 }}" | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision"
+          
+          # ✅ Validación de seguridad del perfil
+          echo "Validando perfil de provisión..."
+          security cms -D -i "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision" > /dev/null
+          
+          if [ ! -s "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision" ]; then
+            echo "Error: El perfil de provisión está vacío o no se decodificó correctamente."
+            exit 1
+          fi
 
-      - name: Build iOS App (Archive Signed V18)
+      - name: Build iOS App (Archive Signed V20)
         run: |
-          # No necesitamos -xcconfig porque ya está en el project.yml
           xcodebuild \
             -project GrillaFux.xcodeproj \
             -scheme GrillaFux \
             -sdk iphoneos \
             -configuration Release \
             -archivePath "$PWD/build/GrillaFux.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="GrillaFux Distribution" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM=ZY8K4XH28N \
-            CODE_SIGN_STYLE=Automatic \
+            -skipPackagePluginValidation \
             clean archive
 
       - name: Export IPA
