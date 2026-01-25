@@ -33,9 +33,11 @@ targets:
         MARKETING_VERSION: 1.0
         CURRENT_PROJECT_VERSION: 1
         DEVELOPMENT_TEAM: ZY8K4XH28N
-        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_STYLE: Manual
         SWIFT_VERSION: 5.7
         CODE_SIGN_ENTITLEMENTS: GrillaFux/GrillaFux.entitlements
-        # 🔑 Override para la app (Forzamos firma solo para este Target)
+        PROVISIONING_PROFILE_SPECIFIER: "GrillaFux Distribution"
+        # 🔑 Explicit signing for the app target
         CODE_SIGNING_ALLOWED: YES
         CODE_SIGNING_REQUIRED: YES
+        CODE_SIGN_IDENTITY: "Apple Distribution"
