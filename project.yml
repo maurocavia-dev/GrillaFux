@@ -8,12 +8,8 @@ packages:
 # Configuración a nivel de PROYECTO (Desactivamos firma para dependencias/SPM)
 settings:
   base:
-    CODE_SIGNING_ALLOWED: NO
-    CODE_SIGNING_REQUIRED: NO
-    CODE_SIGN_IDENTITY: ""
-    AD_HOC_CODE_SIGNING_ALLOWED: NO
-    # Prevent xcodebuild overrides from leaking into dependencies
-    PROVISIONING_PROFILE_SPECIFIER: ""
+    # Relaxed signing for Project level - let defaults apply
+    SWIFT_VERSION: 5.7
 targets:
   GrillaFux:
     type: application
