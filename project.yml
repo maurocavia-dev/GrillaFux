@@ -1,4 +1,8 @@
 name: GrillaFux
+
+# 🔥 Post-Generation Hook: Resolve dependencies immediately
+postGenCommand: |
+  xcodebuild -resolvePackageDependencies -project GrillaFux.xcodeproj -scheme GrillaFux
 options:
   bundleIdPrefix: com.basquetpass
 packages:
