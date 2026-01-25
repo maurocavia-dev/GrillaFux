@@ -1,0 +1,58 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build_ios:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        
+      - name: Install XcodeGen
+        run: brew install xcodegen
+        
+      - name: Generate Xcode Project
+        run: xcodegen generate
+        
+      - name: Install Apple Certificate
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.P12_BASE64 }}
+          p12-password: ${{ secrets.P12_PASSWORD }}
+          
+      - name: Install Provisioning Profile
+        uses: apple-actions/download-provisioning-profiles@v1
+        with:
+          bundle-id: com.basquetpass.logistica
+          profile-type: IOS_APP_STORE
+          ignore-profile-type-error: true
+          
+      - name: Build iOS App
+        run: |
+          xcodebuild -project GrillaFux.xcodeproj \
+            -scheme GrillaFux \
+            -sdk iphoneos \
+            -configuration Release \
+            -archivePath $PWD/build/GrillaFux.xcarchive \
+            clean archive \
+            CODE_SIGN_STYLE="Manual" \
+            PROVISIONING_PROFILE_SPECIFIER="GrillaFux Distribution" \
+            CODE_SIGN_IDENTITY="Apple Distribution"
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $PWD/build/GrillaFux.xcarchive \
+            -exportOptionsPlist exportOptions.plist \
+            -exportPath $PWD/build/output
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v3
+        with:
+          name: GrillaFux.ipa
+          path: build/output/GrillaFux.ipa
