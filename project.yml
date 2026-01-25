@@ -43,4 +43,3 @@ targets:
         CODE_SIGNING_ALLOWED: YES
         CODE_SIGNING_REQUIRED: YES
         CODE_SIGN_IDENTITY: "Apple Distribution"
-
