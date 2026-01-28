@@ -32,7 +32,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.basquetpass.logistica
         MARKETING_VERSION: 1.2
-        CURRENT_PROJECT_VERSION: 10
+        CURRENT_PROJECT_VERSION: 15
         DEVELOPMENT_TEAM: ZY8K4XH28N
         CODE_SIGN_STYLE: Manual
         SWIFT_VERSION: 5.7
