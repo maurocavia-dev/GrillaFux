@@ -60,6 +60,15 @@ jobs:
           find . -name "*swiftpm*" -type d
           ls -la GrillaFux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm 2>/dev/null || echo "⚠️ Carpeta swiftpm no encontrada en el workspace"
 
+      - name: 🚨 FORCE VERSION 200 (Nuclear Option)
+        run: |
+          echo "Overriding Info.plist version..."
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 200" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.5" GrillaFux/Info.plist
+          echo "=== VERIFIED INFO.PLIST CONTENT ==="
+          cat GrillaFux/Info.plist
+          echo "==================================="
+
       - name: Build iOS App (Archive V35 Green)
         run: |
           xcodebuild archive \
@@ -110,3 +119,4 @@ jobs:
             --file "$PWD/build/output/GrillaFux.ipa" \
             --apiKey "$API_KEY_ID" \
             --apiIssuer "$ISSUER_ID"
+
