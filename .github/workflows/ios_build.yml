@@ -51,7 +51,7 @@ jobs:
           find . -name "*swiftpm*" -type d
           ls -la GrillaFux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm 2>/dev/null || echo "⚠️ Carpeta swiftpm no encontrada en el workspace"
 
-      - name: Build iOS App (Archive V29)
+      - name: Build iOS App (Archive V35 Green)
         run: |
           xcodebuild archive \
             -project GrillaFux.xcodeproj \
@@ -84,8 +84,6 @@ jobs:
           mkdir -p ~/.private_keys
           
           # 2. Decodificar/Guardar la clave privada
-          # Asumimos que el secreto es el texto plano del p8 o base64
-          # Si el usuario copio el texto tal cual de Apple:
           echo "$API_KEY_BASE64" > ~/.private_keys/AuthKey_$API_KEY_ID.p8
           
           echo "Subiendo a TestFlight..."
@@ -101,8 +99,5 @@ jobs:
           xcrun altool --upload-app \
             --type ios \
             --file "$PWD/build/output/GrillaFux.ipa" \
-            --apiKey "$API_KEY_ID" \
-            --apiIssuer "$ISSUER_ID"
-
             --apiKey "$API_KEY_ID" \
             --apiIssuer "$ISSUER_ID"
