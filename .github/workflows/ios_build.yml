@@ -13,6 +13,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: 🔍 DEBUG - Ver versiones (Imprimir archivos)
+        run: |
+          echo "=== PROJECT.YML CONTENT ==="
+          cat project.yml
+          echo "---------------------------"
+          echo "=== INFO.PLIST CONTENT ==="
+          cat GrillaFux/Info.plist
+          echo "=========================="
+
       - name: Install Mint & XcodeGen
         run: |
           brew install mint
