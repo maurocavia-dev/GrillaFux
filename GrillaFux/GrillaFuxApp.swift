@@ -1,15 +1,8 @@
 import SwiftUI
 import FirebaseCore
 import FirebaseMessaging
-import Combine
 
-// --- 1. TOKEN MANAGER (Singleton) ---
-class TokenManager: ObservableObject {
-    static let shared = TokenManager()
-    @Published var fcmToken: String?
-}
-
-// --- 2. APP DELEGATE ---
+// --- APP DELEGATE ---
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
@@ -35,7 +28,6 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         print("Firebase registration token: \(String(describing: fcmToken))")
         if let token = fcmToken {
-            // Guardamos el token para que el WebView lo lea
             DispatchQueue.main.async {
                 TokenManager.shared.fcmToken = token
             }
@@ -43,7 +35,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
     }
 }
 
-// --- 3. MAIN STRUCT ---
+// --- MAIN STRUCT ---
 @main
 struct GrillaFuxApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
