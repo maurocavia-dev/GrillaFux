@@ -13,8 +13,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 26
-        run: sudo xcode-select -s /Applications/Xcode_26.app/Contents/Developer
+      - name: Select latest Xcode
+        run: |
+          XCODE=\
+          echo "Using Xcode: \"
+          sudo xcode-select -s "\/Contents/Developer"
+          xcodebuild -version
 
       - name: 🔍 DEBUG - Ver versiones (Imprimir archivos)
         run: |
