@@ -63,7 +63,7 @@ jobs:
       - name: 🚨 FORCE VERSION 200 (Nuclear Option)
         run: |
           echo "Overriding Info.plist version..."
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 200" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 201" GrillaFux/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.5" GrillaFux/Info.plist
           echo "=== VERIFIED INFO.PLIST CONTENT ==="
           cat GrillaFux/Info.plist
