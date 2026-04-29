@@ -15,9 +15,9 @@ jobs:
 
       - name: Select latest Xcode
         run: |
-          XCODE=\
-          echo "Using Xcode: \"
-          sudo xcode-select -s "\/Contents/Developer"
+          XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using Xcode: $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
 
       - name: 🔍 DEBUG - Ver versiones (Imprimir archivos)
@@ -126,4 +126,5 @@ jobs:
             --file "$PWD/build/output/GrillaFux.ipa" \
             --apiKey "$API_KEY_ID" \
             --apiIssuer "$ISSUER_ID"
+
 
