@@ -1,11 +1,12 @@
 import SwiftUI
 import WebKit
 import Combine
+import FirebaseMessaging
 
 struct ContentView: View {
     let urlString = "https://appfux.sytes.net/grilla/"
     @ObservedObject var tokenManager = TokenManager.shared
-    
+
     var body: some View {
         WebView(url: URL(string: urlString)!, token: tokenManager.fcmToken)
             .edgesIgnoringSafeArea(.all)
@@ -22,7 +23,7 @@ struct WebView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
-        
+
         // --- BRIDGE SCRIPT ---
         let scriptSource = """
             try {
@@ -30,30 +31,30 @@ struct WebView: UIViewRepresentable {
                 window.isIOSNative = true;
             } catch(e) {}
         """
-        
+
         let script = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         config.userContentController.addUserScript(script)
-        
+
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
-        
+
         // Custom User Agent
         webView.customUserAgent = "GrillaFuxApp/1.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
-        
+
         webView.allowsBackForwardNavigationGestures = true
-        
+
         webView.load(URLRequest(url: url))
-        
+
         return webView
     }
 
     func updateUIView(_ uiView: WKWebView, context: Context) {
         injectToken(into: uiView)
     }
-    
+
     func injectToken(into webView: WKWebView) {
         if let t = token {
-            let js = "if(window.onFirebaseTokenReceived) window.onFirebaseTokenReceived('\(t)');"
+            let js = "if(window.onFirebaseTokenReceived) window.onFirebaseTokenReceived(\'\(t)\');"
             webView.evaluateJavaScript(js, completionHandler: nil)
         }
     }
@@ -66,7 +67,16 @@ struct WebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            // Inyectar desde TokenManager si ya esta disponible
             parent.injectToken(into: webView)
+            // Obtener token actual de Firebase directamente (cubre el caso donde no cambio y el delegate no se llamo)
+            Messaging.messaging().token { token, error in
+                guard let token = token, error == nil else { return }
+                let js = "if(window.onFirebaseTokenReceived) window.onFirebaseTokenReceived(\'\(token)\');"
+                DispatchQueue.main.async {
+                    webView.evaluateJavaScript(js, completionHandler: nil)
+                }
+            }
         }
     }
 }
