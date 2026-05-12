@@ -20,7 +20,7 @@ jobs:
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
 
-      - name: 🔍 DEBUG - Ver versiones (Imprimir archivos)
+      - name: DEBUG - Ver versiones (Imprimir archivos)
         run: |
           echo "=== PROJECT.YML CONTENT ==="
           cat project.yml
@@ -33,11 +33,10 @@ jobs:
         run: |
           brew install mint
           mint install yonaskolb/xcodegen
-          
+
       - name: Generate Xcode Project
         run: mint run xcodegen generate
 
-      # 🚫 Eliminado paso separado de resolución. Confiamos en "One Shot" Archive.
       - name: Clean DerivedData
         run: rm -rf ~/Library/Developer/Xcode/DerivedData
 
@@ -47,36 +46,35 @@ jobs:
           p12-file-base64: ${{ secrets.P12_BASE64 }}
           p12-password: ${{ secrets.P12_PASSWORD }}
 
-      - name: Install Provisioning Profile (Moved after resolution)
+      - name: Install Provisioning Profile
         run: |
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | tr -d '\n' | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision"
-          
-          # ✅ Validación de seguridad del perfil
-          echo "Validando perfil de provisión..."
+
+          echo "Validando perfil de provision..."
           security cms -D -i "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision" > /dev/null
-          
+
           if [ ! -s "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision" ]; then
-            echo "Error: El perfil de provisión está vacío o no se decodificó correctamente."
+            echo "Error: El perfil de provision esta vacio o no se decodifico correctamente."
             exit 1
           fi
 
-      - name: Debug SPM Resolution (The Proof)
+      - name: Debug SPM Resolution
         run: |
-          echo "Buscando rastro de SwiftPM para confirmar inicialización..."
+          echo "Buscando rastro de SwiftPM..."
           find . -name "*swiftpm*" -type d
-          ls -la GrillaFux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm 2>/dev/null || echo "⚠️ Carpeta swiftpm no encontrada en el workspace"
+          ls -la GrillaFux.xcodeproj/project.xcworkspace/xcshareddata/swiftpm 2>/dev/null || echo "Carpeta swiftpm no encontrada"
 
-      - name: 🚨 FORCE VERSION 200 (Nuclear Option)
+      - name: Set version numbers
         run: |
           echo "Overriding Info.plist version..."
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 201" GrillaFux/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.5" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 202" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.6" GrillaFux/Info.plist
           echo "=== VERIFIED INFO.PLIST CONTENT ==="
           cat GrillaFux/Info.plist
           echo "==================================="
 
-      - name: Build iOS App (Archive V35 Green)
+      - name: Build iOS App (Archive)
         run: |
           xcodebuild archive \
             -project GrillaFux.xcodeproj \
@@ -93,38 +91,31 @@ jobs:
             -exportOptionsPlist exportOptions.plist \
             -exportPath "$PWD/build/output"
 
-      - name: Upload IPA
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: GrillaFux.ipa
           path: build/output/*.ipa
 
-      - name: Upload to TestFlight 🚀
+      - name: Upload to TestFlight
         env:
           API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          # 1. Crear directorio para claves privadas
           mkdir -p ~/.private_keys
-          
-          # 2. Decodificar/Guardar la clave privada
           echo "$API_KEY_BASE64" > ~/.private_keys/AuthKey_$API_KEY_ID.p8
-          
+
           echo "Subiendo a TestFlight..."
-          
-          # 3. Validar antes de subir (Optional but good)
+
           xcrun altool --validate-app \
             --type ios \
             --file "$PWD/build/output/GrillaFux.ipa" \
             --apiKey "$API_KEY_ID" \
             --apiIssuer "$ISSUER_ID"
-            
-          # 4. Subir la App
+
           xcrun altool --upload-app \
             --type ios \
             --file "$PWD/build/output/GrillaFux.ipa" \
             --apiKey "$API_KEY_ID" \
             --apiIssuer "$ISSUER_ID"
-
-
