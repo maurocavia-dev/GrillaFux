@@ -64,17 +64,17 @@ struct WebView: UIViewRepresentable {
         URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
     }
 
-    // Logging de error FCM al backend para diagnóstico
+    // Logging de error FCM al backend para diagnóstico (endpoint separado, no toca la colección Device)
     static func logFCMError(_ error: Error) {
-        guard let url = URL(string: "https://appfux.sytes.net/api/register-device") else { return }
+        guard let url = URL(string: "https://appfux.sytes.net/api/log-fcm-error") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 10
         let body: [String: String] = [
-            "token": "FCM_ERR:\(error.localizedDescription)",
-            "platform": "ios_debug",
-            "userId": "FCM_ERROR"
+            "error": error.localizedDescription,
+            "platform": "ios",
+            "userId": UserDefaults.standard.string(forKey: "notif_name") ?? ""
         ]
         req.httpBody = try? JSONSerialization.data(withJSONObject: body)
         URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
