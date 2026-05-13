@@ -68,7 +68,7 @@ jobs:
       - name: Set version numbers
         run: |
           echo "Overriding Info.plist version..."
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 204" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 205" GrillaFux/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.6" GrillaFux/Info.plist
           echo "=== VERIFIED INFO.PLIST CONTENT ==="
           cat GrillaFux/Info.plist
