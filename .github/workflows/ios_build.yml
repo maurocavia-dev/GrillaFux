@@ -98,6 +98,7 @@ jobs:
           path: build/output/*.ipa
 
       - name: Upload to TestFlight
+        continue-on-error: true
         env:
           API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
