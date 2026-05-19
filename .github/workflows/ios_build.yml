@@ -119,3 +119,119 @@ jobs:
             --file "$PWD/build/output/GrillaFux.ipa" \
             --apiKey "$API_KEY_ID" \
             --apiIssuer "$ISSUER_ID"
+
+      - name: Release build to all beta groups
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          BUNDLE_ID: com.basquetpass.logistica
+          BUILD_NUMBER: "207"
+        run: |
+          python3 -m pip install --quiet pyjwt cryptography requests
+          python3 << 'PYEOF'
+          import jwt, time, os, base64, requests, sys
+          from cryptography.hazmat.primitives import serialization
+
+          KEY_ID = os.environ['API_KEY_ID']
+          ISSUER_ID = os.environ['ISSUER_ID']
+          KEY_B64 = os.environ['API_KEY_BASE64']
+          BUNDLE_ID = os.environ['BUNDLE_ID']
+          BUILD_NUMBER = os.environ['BUILD_NUMBER']
+
+          try:
+              key_pem = base64.b64decode(KEY_B64)
+          except Exception:
+              key_pem = KEY_B64.encode()
+          private_key = serialization.load_pem_private_key(key_pem, password=None)
+
+          def gen_token():
+              payload = {
+                  'iss': ISSUER_ID,
+                  'iat': int(time.time()),
+                  'exp': int(time.time()) + 1200,
+                  'aud': 'appstoreconnect-v1'
+              }
+              headers = {'kid': KEY_ID, 'typ': 'JWT'}
+              return jwt.encode(payload, private_key, algorithm='ES256', headers=headers)
+
+          BASE = 'https://api.appstoreconnect.apple.com/v1'
+          def h(json_ct=False):
+              hh = {'Authorization': f'Bearer {gen_token()}'}
+              if json_ct:
+                  hh['Content-Type'] = 'application/json'
+              return hh
+
+          r = requests.get(f'{BASE}/apps?filter[bundleId]={BUNDLE_ID}', headers=h())
+          r.raise_for_status()
+          apps = r.json()['data']
+          if not apps:
+              print(f'ERROR: No app found for bundle {BUNDLE_ID}')
+              sys.exit(1)
+          APP_ID = apps[0]['id']
+          print(f'App ID: {APP_ID}')
+
+          print(f'Waiting for build {BUILD_NUMBER} (state=VALID)...')
+          build_id = None
+          for i in range(80):
+              r = requests.get(f'{BASE}/builds?filter[app]={APP_ID}&filter[version]={BUILD_NUMBER}&limit=10&sort=-uploadedDate', headers=h())
+              r.raise_for_status()
+              builds = r.json()['data']
+              if builds:
+                  b = builds[0]
+                  state = b['attributes']['processingState']
+                  print(f'  [{i:02d}] processingState={state}')
+                  if state == 'VALID':
+                      build_id = b['id']
+                      break
+                  elif state in ('FAILED', 'INVALID'):
+                      print(f'ERROR: Build en estado terminal: {state}')
+                      sys.exit(1)
+              else:
+                  print(f'  [{i:02d}] build aun no aparece en la API')
+              time.sleep(30)
+
+          if not build_id:
+              print('ERROR: Build nunca llego a VALID')
+              sys.exit(1)
+
+          print(f'Build ID: {build_id}')
+
+          patch = {
+              'data': {
+                  'type': 'builds',
+                  'id': build_id,
+                  'attributes': {'usesNonExemptEncryption': False}
+              }
+          }
+          r = requests.patch(f'{BASE}/builds/{build_id}', headers=h(True), json=patch)
+          if r.status_code >= 400:
+              print(f'WARN: Export compliance: {r.status_code} {r.text[:200]}')
+          else:
+              print('Export compliance OK')
+
+          r = requests.get(f'{BASE}/apps/{APP_ID}/betaGroups?limit=200', headers=h())
+          r.raise_for_status()
+          groups = r.json()['data']
+          print(f'Found {len(groups)} beta groups:')
+          for g in groups:
+              attrs = g['attributes']
+              print(f'  - {attrs.get("name")} (internal={attrs.get("isInternalGroup")})')
+
+          ok, fail = 0, 0
+          for g in groups:
+              gid = g['id']
+              gname = g['attributes'].get('name', '?')
+              body = {'data': [{'type': 'builds', 'id': build_id}]}
+              r = requests.post(f'{BASE}/betaGroups/{gid}/relationships/builds', headers=h(True), json=body)
+              if r.status_code in (200, 201, 204):
+                  print(f'  OK "{gname}" - liberado')
+                  ok += 1
+              else:
+                  print(f'  FAIL "{gname}" - {r.status_code} {r.text[:200]}')
+                  fail += 1
+
+          print(f'\nDone: {ok} grupos liberados, {fail} fallaron')
+          if fail > 0 and ok == 0:
+              sys.exit(1)
+          PYEOF
