@@ -140,10 +140,19 @@ jobs:
           BUNDLE_ID = os.environ['BUNDLE_ID']
           BUILD_NUMBER = os.environ['BUILD_NUMBER']
 
-          try:
-              key_pem = base64.b64decode(KEY_B64)
-          except Exception:
-              key_pem = KEY_B64.encode()
+          # El secret puede venir como PEM directo o como base64 del PEM
+          raw = KEY_B64.strip()
+          if raw.startswith('-----BEGIN'):
+              key_pem = raw.encode()
+          else:
+              try:
+                  decoded = base64.b64decode(raw)
+                  if b'-----BEGIN' in decoded:
+                      key_pem = decoded
+                  else:
+                      key_pem = raw.encode()
+              except Exception:
+                  key_pem = raw.encode()
           private_key = serialization.load_pem_private_key(key_pem, password=None)
 
           def gen_token():
