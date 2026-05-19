@@ -1,0 +1,99 @@
+name: TestFlight Diagnostic
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query App Store Connect
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          BUNDLE_ID: com.basquetpass.logistica
+        run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
+          python3 << 'PYEOF'
+          import jwt, time, os, base64, requests, json
+          from cryptography.hazmat.primitives import serialization
+
+          KEY_ID = os.environ['API_KEY_ID']
+          ISSUER_ID = os.environ['ISSUER_ID']
+          KEY_B64 = os.environ['API_KEY_BASE64']
+          BUNDLE_ID = os.environ['BUNDLE_ID']
+
+          raw = KEY_B64.strip()
+          if raw.startswith('-----BEGIN'):
+              key_pem = raw.encode()
+          else:
+              try:
+                  decoded = base64.b64decode(raw)
+                  if b'-----BEGIN' in decoded:
+                      key_pem = decoded
+                  else:
+                      key_pem = raw.encode()
+              except Exception:
+                  key_pem = raw.encode()
+          private_key = serialization.load_pem_private_key(key_pem, password=None)
+
+          def tk():
+              payload = {'iss': ISSUER_ID, 'iat': int(time.time()), 'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'}
+              return jwt.encode(payload, private_key, algorithm='ES256', headers={'kid': KEY_ID, 'typ': 'JWT'})
+
+          BASE = 'https://api.appstoreconnect.apple.com/v1'
+          H = lambda: {'Authorization': f'Bearer {tk()}'}
+
+          r = requests.get(f'{BASE}/apps?filter[bundleId]={BUNDLE_ID}', headers=H())
+          APP_ID = r.json()['data'][0]['id']
+          print(f'App ID: {APP_ID}\n')
+
+          # Listar ultimos 10 builds con todos los detalles
+          print('=== Ultimos builds ===')
+          r = requests.get(f'{BASE}/builds?filter[app]={APP_ID}&limit=10&sort=-uploadedDate&include=preReleaseVersion,buildBetaDetail', headers=H())
+          data = r.json()
+          builds_by_id = {b['id']: b for b in data['data']}
+          prv_by_id = {x['id']: x for x in data.get('included', []) if x['type']=='preReleaseVersions'}
+          bbd_by_id = {x['id']: x for x in data.get('included', []) if x['type']=='buildBetaDetails'}
+
+          for b in data['data']:
+              attrs = b['attributes']
+              build_num = attrs.get('version', '?')
+              processing = attrs.get('processingState', '?')
+              expired = attrs.get('expired', '?')
+              uses_enc = attrs.get('usesNonExemptEncryption', '?')
+              uploaded = attrs.get('uploadedDate', '?')[:19]
+
+              prv_rel = b['relationships'].get('preReleaseVersion', {}).get('data')
+              version = '?'
+              if prv_rel:
+                  prv = prv_by_id.get(prv_rel['id'])
+                  if prv:
+                      version = prv['attributes'].get('version', '?')
+
+              bbd_rel = b['relationships'].get('buildBetaDetail', {}).get('data')
+              ext_state = '?'
+              int_state = '?'
+              if bbd_rel:
+                  bbd = bbd_by_id.get(bbd_rel['id'])
+                  if bbd:
+                      ext_state = bbd['attributes'].get('externalBuildState', '?')
+                      int_state = bbd['attributes'].get('internalBuildState', '?')
+
+              print(f'Build {build_num} (v{version}) | proc={processing} | expired={expired} | enc={uses_enc}')
+              print(f'  ext_state={ext_state} | int_state={int_state} | uploaded={uploaded}')
+
+          # Listar grupos
+          print('\n=== Beta Groups ===')
+          r = requests.get(f'{BASE}/apps/{APP_ID}/betaGroups?limit=200', headers=H())
+          for g in r.json()['data']:
+              a = g['attributes']
+              gid = g['id']
+              print(f'\nGroup: {a.get("name")} (id={gid}, internal={a.get("isInternalGroup")})')
+              # Ver que builds tiene este grupo
+              r2 = requests.get(f'{BASE}/betaGroups/{gid}/builds?limit=5&sort=-uploadedDate', headers=H())
+              for b in r2.json().get('data', []):
+                  ba = b['attributes']
+                  print(f'  -> Build {ba.get("version")} | proc={ba.get("processingState")} | exp={ba.get("expired")}')
+          PYEOF
