@@ -1,28 +1,35 @@
-name: TestFlight Diagnostic
+name: TestFlight Submit
 
 on:
   workflow_dispatch:
+    inputs:
+      build_number:
+        description: 'Build number to submit'
+        required: true
+        default: '208'
 
 jobs:
-  diagnostic:
+  submit:
     runs-on: ubuntu-latest
     steps:
-      - name: Query App Store Connect
+      - name: Submit build for beta review (auto-approves if same version)
         env:
           API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           BUNDLE_ID: com.basquetpass.logistica
+          BUILD_NUMBER: ${{ github.event.inputs.build_number }}
         run: |
           python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           python3 << 'PYEOF'
-          import jwt, time, os, base64, requests, json
+          import jwt, time, os, base64, requests, sys
           from cryptography.hazmat.primitives import serialization
 
           KEY_ID = os.environ['API_KEY_ID']
           ISSUER_ID = os.environ['ISSUER_ID']
           KEY_B64 = os.environ['API_KEY_BASE64']
           BUNDLE_ID = os.environ['BUNDLE_ID']
+          BUILD_NUMBER = os.environ['BUILD_NUMBER']
 
           raw = KEY_B64.strip()
           if raw.startswith('-----BEGIN'):
@@ -30,10 +37,7 @@ jobs:
           else:
               try:
                   decoded = base64.b64decode(raw)
-                  if b'-----BEGIN' in decoded:
-                      key_pem = decoded
-                  else:
-                      key_pem = raw.encode()
+                  key_pem = decoded if b'-----BEGIN' in decoded else raw.encode()
               except Exception:
                   key_pem = raw.encode()
           private_key = serialization.load_pem_private_key(key_pem, password=None)
@@ -43,57 +47,35 @@ jobs:
               return jwt.encode(payload, private_key, algorithm='ES256', headers={'kid': KEY_ID, 'typ': 'JWT'})
 
           BASE = 'https://api.appstoreconnect.apple.com/v1'
-          H = lambda: {'Authorization': f'Bearer {tk()}'}
+          H = lambda ct=False: ({'Authorization': f'Bearer {tk()}', 'Content-Type': 'application/json'} if ct else {'Authorization': f'Bearer {tk()}'})
 
           r = requests.get(f'{BASE}/apps?filter[bundleId]={BUNDLE_ID}', headers=H())
           APP_ID = r.json()['data'][0]['id']
-          print(f'App ID: {APP_ID}\n')
+          print(f'App: {APP_ID}')
 
-          # Listar ultimos 10 builds con todos los detalles
-          print('=== Ultimos builds ===')
-          r = requests.get(f'{BASE}/builds?filter[app]={APP_ID}&limit=10&sort=-uploadedDate&include=preReleaseVersion,buildBetaDetail', headers=H())
-          data = r.json()
-          builds_by_id = {b['id']: b for b in data['data']}
-          prv_by_id = {x['id']: x for x in data.get('included', []) if x['type']=='preReleaseVersions'}
-          bbd_by_id = {x['id']: x for x in data.get('included', []) if x['type']=='buildBetaDetails'}
+          r = requests.get(f'{BASE}/builds?filter[app]={APP_ID}&filter[version]={BUILD_NUMBER}&limit=1', headers=H())
+          builds = r.json()['data']
+          if not builds:
+              print(f'ERROR: build {BUILD_NUMBER} no encontrado')
+              sys.exit(1)
+          BUILD_ID = builds[0]['id']
+          print(f'Build {BUILD_NUMBER}: {BUILD_ID}')
 
-          for b in data['data']:
-              attrs = b['attributes']
-              build_num = attrs.get('version', '?')
-              processing = attrs.get('processingState', '?')
-              expired = attrs.get('expired', '?')
-              uses_enc = attrs.get('usesNonExemptEncryption', '?')
-              uploaded = attrs.get('uploadedDate', '?')[:19]
-
-              prv_rel = b['relationships'].get('preReleaseVersion', {}).get('data')
-              version = '?'
-              if prv_rel:
-                  prv = prv_by_id.get(prv_rel['id'])
-                  if prv:
-                      version = prv['attributes'].get('version', '?')
-
-              bbd_rel = b['relationships'].get('buildBetaDetail', {}).get('data')
-              ext_state = '?'
-              int_state = '?'
-              if bbd_rel:
-                  bbd = bbd_by_id.get(bbd_rel['id'])
-                  if bbd:
-                      ext_state = bbd['attributes'].get('externalBuildState', '?')
-                      int_state = bbd['attributes'].get('internalBuildState', '?')
-
-              print(f'Build {build_num} (v{version}) | proc={processing} | expired={expired} | enc={uses_enc}')
-              print(f'  ext_state={ext_state} | int_state={int_state} | uploaded={uploaded}')
-
-          # Listar grupos
-          print('\n=== Beta Groups ===')
-          r = requests.get(f'{BASE}/apps/{APP_ID}/betaGroups?limit=200', headers=H())
-          for g in r.json()['data']:
-              a = g['attributes']
-              gid = g['id']
-              print(f'\nGroup: {a.get("name")} (id={gid}, internal={a.get("isInternalGroup")})')
-              # Ver que builds tiene este grupo
-              r2 = requests.get(f'{BASE}/betaGroups/{gid}/builds?limit=5&sort=-uploadedDate', headers=H())
-              for b in r2.json().get('data', []):
-                  ba = b['attributes']
-                  print(f'  -> Build {ba.get("version")} | proc={ba.get("processingState")} | exp={ba.get("expired")}')
+          # Crear betaAppReviewSubmission
+          body = {
+              'data': {
+                  'type': 'betaAppReviewSubmissions',
+                  'relationships': {
+                      'build': {'data': {'type': 'builds', 'id': BUILD_ID}}
+                  }
+              }
+          }
+          r = requests.post(f'{BASE}/betaAppReviewSubmissions', headers=H(True), json=body)
+          if r.status_code in (200, 201):
+              print(f'OK: build {BUILD_NUMBER} submitted for beta review (auto-aprueba si misma version)')
+              print(r.text[:300])
+          else:
+              print(f'FAIL: {r.status_code}')
+              print(r.text[:500])
+              sys.exit(1)
           PYEOF
