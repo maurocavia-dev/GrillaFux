@@ -1,0 +1,56 @@
+name: TestFlight Status
+
+on:
+  workflow_dispatch:
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check build states
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          BUNDLE_ID: com.basquetpass.logistica
+        run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
+          python3 << 'PYEOF'
+          import jwt, time, os, base64, requests
+          from cryptography.hazmat.primitives import serialization
+          KEY_ID = os.environ['API_KEY_ID']
+          ISSUER_ID = os.environ['ISSUER_ID']
+          KEY_B64 = os.environ['API_KEY_BASE64'].strip()
+          if KEY_B64.startswith('-----BEGIN'):
+              key_pem = KEY_B64.encode()
+          else:
+              try:
+                  d = base64.b64decode(KEY_B64)
+                  key_pem = d if b'-----BEGIN' in d else KEY_B64.encode()
+              except: key_pem = KEY_B64.encode()
+          pk = serialization.load_pem_private_key(key_pem, password=None)
+          def tk():
+              p = {'iss': ISSUER_ID, 'iat': int(time.time()), 'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'}
+              return jwt.encode(p, pk, algorithm='ES256', headers={'kid': KEY_ID, 'typ': 'JWT'})
+          BASE = 'https://api.appstoreconnect.apple.com/v1'
+          H = {'Authorization': f'Bearer {tk()}'}
+          r = requests.get(f'{BASE}/apps?filter[bundleId]={os.environ["BUNDLE_ID"]}', headers=H)
+          APP_ID = r.json()['data'][0]['id']
+          r = requests.get(f'{BASE}/builds?filter[app]={APP_ID}&limit=5&sort=-uploadedDate&include=buildBetaDetail,preReleaseVersion', headers=H)
+          data = r.json()
+          prv = {x['id']: x for x in data.get('included', []) if x['type']=='preReleaseVersions'}
+          bbd = {x['id']: x for x in data.get('included', []) if x['type']=='buildBetaDetails'}
+          for b in data['data']:
+              bnum = b['attributes']['version']
+              version = '?'
+              pr = b['relationships'].get('preReleaseVersion', {}).get('data')
+              if pr: version = prv.get(pr['id'], {}).get('attributes', {}).get('version', '?')
+              ext = int_ = '?'
+              br = b['relationships'].get('buildBetaDetail', {}).get('data')
+              if br:
+                  bd = bbd.get(br['id'])
+                  if bd:
+                      ext = bd['attributes'].get('externalBuildState', '?')
+                      int_ = bd['attributes'].get('internalBuildState', '?')
+              print(f'Build {bnum} (v{version}) | ext={ext} | int={int_}')
+          PYEOF
