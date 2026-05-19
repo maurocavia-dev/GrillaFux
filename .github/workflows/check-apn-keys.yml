@@ -1,0 +1,64 @@
+name: Check APN Keys
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check specific APN keys
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
+          python3 << 'PYEOF'
+          import jwt, time, os, base64, requests
+          from cryptography.hazmat.primitives import serialization
+          KEY_ID = os.environ['API_KEY_ID']
+          ISSUER_ID = os.environ['ISSUER_ID']
+          KEY_B64 = os.environ['API_KEY_BASE64'].strip()
+          if KEY_B64.startswith('-----BEGIN'): key_pem = KEY_B64.encode()
+          else:
+              try:
+                  d = base64.b64decode(KEY_B64)
+                  key_pem = d if b'-----BEGIN' in d else KEY_B64.encode()
+              except: key_pem = KEY_B64.encode()
+          pk = serialization.load_pem_private_key(key_pem, password=None)
+          payload = {'iss': ISSUER_ID, 'iat': int(time.time()), 'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'}
+          tk = jwt.encode(payload, pk, algorithm='ES256', headers={'kid': KEY_ID, 'typ': 'JWT'})
+          H = {'Authorization': f'Bearer {tk}'}
+          BASE = 'https://api.appstoreconnect.apple.com/v1'
+
+          # 1. Listar TODAS las keys (sin filtros)
+          print('=== Listado completo de keys ===')
+          r = requests.get(f'{BASE}/keys?limit=200', headers=H)
+          data = r.json()
+          if 'errors' in data:
+              print(f'API errors: {data["errors"]}')
+          else:
+              keys = data.get('data', [])
+              print(f'Total keys: {len(keys)}')
+              for k in keys:
+                  a = k['attributes']
+                  print(f'  - {a.get("keyId")} | name={a.get("name")} | type={a.get("keyType")} | revoked={a.get("revokingDate")}')
+
+          # 2. Verificar keys especificas
+          for key_id_check in ['D82LCTQ3ZQ', 'A6BG942687']:
+              print(f'\n=== Check key {key_id_check} ===')
+              # Buscar por ID
+              r = requests.get(f'{BASE}/keys/{key_id_check}', headers=H)
+              if r.status_code == 200:
+                  k = r.json()['data']
+                  a = k['attributes']
+                  print(f'  EXISTE')
+                  print(f'  name: {a.get("name")}')
+                  print(f'  type: {a.get("keyType")}')
+                  print(f'  created: {a.get("createdDate", "")[:10]}')
+                  print(f'  revoking: {a.get("revokingDate", "ninguno (activa)")}')
+              else:
+                  print(f'  NO existe / status={r.status_code}')
+                  print(f'  body: {r.text[:300]}')
+          PYEOF
