@@ -130,28 +130,12 @@ struct WebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // Inyectar desde TokenManager si ya está disponible
+            // Inyectar token al JS si ya esta disponible (lo guarda el AppDelegate cuando FCM lo entrega)
             parent.injectToken(into: webView)
-
-            // Obtener token de Firebase directamente
-            Messaging.messaging().token { token, error in
-                if let error = error {
-                    // Loguear error al backend para diagnóstico
-                    WebView.logFCMError(error)
-                    return
-                }
-                guard let token = token else { return }
-
-                // 1. Inyectar al JS (para que el app asocie el userId)
-                let js = "if(window.onFirebaseTokenReceived) window.onFirebaseTokenReceived('\(token)');"
-                DispatchQueue.main.async {
-                    webView.evaluateJavaScript(js, completionHandler: nil)
-                }
-
-                // 2. Registro nativo directo (fallback por si JS falla)
-                let savedUserId = UserDefaults.standard.string(forKey: "notif_name") ?? ""
-                WebView.registerNative(token: token, userId: savedUserId)
-            }
+            // NOTA: NO llamamos a Messaging.messaging().token aqui porque puede ejecutarse
+            // antes de que APNs entregue su token. El delegate
+            // messaging(_:didReceiveRegistrationToken:) en AppDelegate maneja todo el ciclo:
+            // espera APNs -> obtiene FCM token -> guarda en TokenManager -> registra en backend.
         }
     }
 }
