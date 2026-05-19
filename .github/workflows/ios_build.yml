@@ -242,6 +242,32 @@ jobs:
                   fail += 1
 
           print(f'\nDone: {ok} grupos liberados, {fail} fallaron')
+
+          # Submit a Beta App Review (auto-aprueba si misma marketing version)
+          print('\nSubmitting build for beta review...')
+          body = {
+              'data': {
+                  'type': 'betaAppReviewSubmissions',
+                  'relationships': {
+                      'build': {'data': {'type': 'builds', 'id': build_id}}
+                  }
+              }
+          }
+          r = requests.post(f'{BASE}/betaAppReviewSubmissions', headers=h(True), json=body)
+          if r.status_code in (200, 201):
+              print('OK: build submitted for beta review (auto-aprueba si misma version)')
+          else:
+              # 409 'already submitted' es OK
+              try:
+                  err = r.json().get('errors', [{}])[0]
+                  code = err.get('code', '')
+                  if 'ALREADY' in code or 'DUPLICATE' in code:
+                      print(f'OK: build ya fue submitted (code={code})')
+                  else:
+                      print(f'WARN submit: {r.status_code} {err.get("title", "")[:200]}')
+              except Exception:
+                  print(f'WARN submit: {r.status_code} {r.text[:200]}')
+
           if fail > 0 and ok == 0:
               sys.exit(1)
           PYEOF
