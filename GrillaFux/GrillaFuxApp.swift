@@ -48,6 +48,15 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         logIOSEvent("05_apns_token_received", "len=\(deviceToken.count) start=\(String(tokenStr.prefix(20)))")
         Messaging.messaging().apnsToken = deviceToken
         logIOSEvent("06_apns_set_in_firebase", "")
+
+        // PLAN B: tambien registrar APNs token DIRECTAMENTE en el backend
+        // (no esperamos a Firebase porque puede tardar/fallar)
+        DispatchQueue.main.async {
+            TokenManager.shared.fcmToken = tokenStr  // reutilizar TokenManager
+            let userId = UserDefaults.standard.string(forKey: "notif_name") ?? ""
+            logIOSEvent("06b_registering_apns_direct", "userId=\(userId)")
+            AppDelegate.registerDevice(token: tokenStr, userId: userId)
+        }
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
