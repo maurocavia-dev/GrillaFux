@@ -46,16 +46,60 @@ jobs:
           p12-file-base64: ${{ secrets.P12_BASE64 }}
           p12-password: ${{ secrets.P12_PASSWORD }}
 
-      - name: Install Provisioning Profile
+      - name: Download Provisioning Profile from API
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | tr -d '\n' | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision"
+          python3 << 'PYEOF'
+          import jwt, time, os, base64, requests
+          from cryptography.hazmat.primitives import serialization
+          KEY_ID = os.environ['API_KEY_ID']
+          ISSUER_ID = os.environ['ISSUER_ID']
+          KEY_B64 = os.environ['API_KEY_BASE64'].strip()
+          if KEY_B64.startswith('-----BEGIN'): key_pem = KEY_B64.encode()
+          else:
+              try:
+                  d = base64.b64decode(KEY_B64)
+                  key_pem = d if b'-----BEGIN' in d else KEY_B64.encode()
+              except: key_pem = KEY_B64.encode()
+          pk = serialization.load_pem_private_key(key_pem, password=None)
+          payload = {'iss': ISSUER_ID, 'iat': int(time.time()), 'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'}
+          tk = jwt.encode(payload, pk, algorithm='ES256', headers={'kid': KEY_ID, 'typ': 'JWT'})
+          H = {'Authorization': f'Bearer {tk}'}
+          BASE = 'https://api.appstoreconnect.apple.com/v1'
+
+          # Buscar el profile ACTIVE de GrillaFux Distribution
+          r = requests.get(f'{BASE}/profiles?limit=200', headers=H)
+          target = None
+          for p in r.json().get('data', []):
+              a = p['attributes']
+              if a.get('name') == 'GrillaFux Distribution' and a.get('profileState') == 'ACTIVE' and a.get('profileType') == 'IOS_APP_STORE':
+                  target = p['id']
+                  break
+          if not target:
+              print('ERROR: profile GrillaFux Distribution ACTIVE no encontrado')
+              import sys; sys.exit(1)
+
+          # Obtener contenido
+          r = requests.get(f'{BASE}/profiles/{target}', headers=H)
+          content_b64 = r.json()['data']['attributes']['profileContent']
+          content_bytes = base64.b64decode(content_b64)
+
+          out_path = os.path.expanduser('~/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision')
+          with open(out_path, 'wb') as f:
+              f.write(content_bytes)
+          print(f'OK: profile descargado ({len(content_bytes)} bytes) -> {out_path}')
+          PYEOF
 
           echo "Validando perfil de provision..."
           security cms -D -i "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision" > /dev/null
 
           if [ ! -s "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision" ]; then
-            echo "Error: El perfil de provision esta vacio o no se decodifico correctamente."
+            echo "Error: El perfil de provision esta vacio."
             exit 1
           fi
 
@@ -68,7 +112,7 @@ jobs:
       - name: Set version numbers
         run: |
           echo "Overriding Info.plist version..."
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 211" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 212" GrillaFux/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.7" GrillaFux/Info.plist
           echo "=== VERIFIED INFO.PLIST CONTENT ==="
           cat GrillaFux/Info.plist
@@ -127,7 +171,7 @@ jobs:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           BUNDLE_ID: com.basquetpass.logistica
-          BUILD_NUMBER: "211"
+          BUILD_NUMBER: "212"
         run: |
           python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           python3 << 'PYEOF'
