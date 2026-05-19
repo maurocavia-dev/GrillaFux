@@ -1,0 +1,91 @@
+name: Verify Certs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List all certs with details + new profile info
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
+          python3 << 'PYEOF'
+          import jwt, time, os, base64, requests, json
+          from cryptography.hazmat.primitives import serialization
+          KEY_ID = os.environ['API_KEY_ID']
+          ISSUER_ID = os.environ['ISSUER_ID']
+          KEY_B64 = os.environ['API_KEY_BASE64'].strip()
+          if KEY_B64.startswith('-----BEGIN'): key_pem = KEY_B64.encode()
+          else:
+              try:
+                  d = base64.b64decode(KEY_B64)
+                  key_pem = d if b'-----BEGIN' in d else KEY_B64.encode()
+              except: key_pem = KEY_B64.encode()
+          pk = serialization.load_pem_private_key(key_pem, password=None)
+          def tk():
+              p = {'iss': ISSUER_ID, 'iat': int(time.time()), 'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'}
+              return jwt.encode(p, pk, algorithm='ES256', headers={'kid': KEY_ID, 'typ': 'JWT'})
+          BASE = 'https://api.appstoreconnect.apple.com/v1'
+          H = {'Authorization': f'Bearer {tk()}'}
+
+          # Listar TODOS los certificates con todos los detalles
+          print('=== TODOS los certificates ===')
+          r = requests.get(f'{BASE}/certificates?limit=200', headers=H)
+          data = r.json()
+          print(f'Total: {len(data.get("data", []))}')
+          for c in data.get('data', []):
+              a = c['attributes']
+              print(f'  TYPE={a.get("certificateType")} NAME="{a.get("name")}" id={c["id"]} disp={a.get("displayName")} exp={a.get("expirationDate", "")[:10]}')
+
+          # Listar TODOS los profiles
+          print('\n=== TODOS los profiles ===')
+          r = requests.get(f'{BASE}/profiles?limit=200&include=certificates,bundleId', headers=H)
+          data = r.json()
+          print(f'Total: {len(data.get("data", []))}')
+          included_certs = {x['id']: x for x in data.get('included', []) if x['type']=='certificates'}
+          included_bids = {x['id']: x for x in data.get('included', []) if x['type']=='bundleIds'}
+          for p in data.get('data', []):
+              a = p['attributes']
+              cert_rels = p['relationships'].get('certificates', {}).get('data', [])
+              bid_rel = p['relationships'].get('bundleId', {}).get('data')
+              bid_name = '?'
+              if bid_rel:
+                  bid = included_bids.get(bid_rel['id'])
+                  if bid:
+                      bid_name = bid['attributes'].get('identifier', '?')
+              print(f'  - {a.get("name")} | state={a.get("profileState")} | type={a.get("profileType")} | bundleId={bid_name}')
+              for cr in cert_rels:
+                  cert = included_certs.get(cr['id'])
+                  if cert:
+                      print(f'      cert: {cert["attributes"].get("certificateType")} - {cert["attributes"].get("name")}')
+
+          # Verificar el profile recien creado (QQ8M386WTC)
+          print('\n=== Profile nuevo QQ8M386WTC ===')
+          r = requests.get(f'{BASE}/profiles/QQ8M386WTC?include=certificates,bundleId,devices', headers=H)
+          if r.status_code == 200:
+              p = r.json()['data']
+              a = p['attributes']
+              print(f'name: {a.get("name")}')
+              print(f'state: {a.get("profileState")}')
+              print(f'type: {a.get("profileType")}')
+              print(f'exp: {a.get("expirationDate", "")[:10]}')
+              # Decodificar y mostrar entitlements
+              pc = a.get('profileContent', '')
+              if pc:
+                  import base64 as b64
+                  decoded = b64.b64decode(pc)
+                  print(f'profileContent len: {len(decoded)}')
+                  # Buscar aps-environment
+                  if b'aps-environment' in decoded:
+                      print('>>> aps-environment ENCONTRADO en el profile')
+                  else:
+                      print('>>> aps-environment NO encontrado')
+          else:
+              print(f'No se pudo obtener detalles: {r.status_code}')
+              print(r.text[:500])
+          PYEOF
