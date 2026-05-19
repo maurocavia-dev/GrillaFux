@@ -129,7 +129,7 @@ jobs:
           BUNDLE_ID: com.basquetpass.logistica
           BUILD_NUMBER: "207"
         run: |
-          python3 -m pip install --quiet pyjwt cryptography requests
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           python3 << 'PYEOF'
           import jwt, time, os, base64, requests, sys
           from cryptography.hazmat.primitives import serialization
