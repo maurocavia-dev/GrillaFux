@@ -1,0 +1,101 @@
+name: Enable Push and Create APN Key
+
+on:
+  workflow_dispatch:
+
+jobs:
+  enable-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable PUSH_NOTIFICATIONS + create APN Key
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
+          python3 << 'PYEOF'
+          import jwt, time, os, base64, requests, json
+          from cryptography.hazmat.primitives import serialization
+          KEY_ID = os.environ['API_KEY_ID']
+          ISSUER_ID = os.environ['ISSUER_ID']
+          KEY_B64 = os.environ['API_KEY_BASE64'].strip()
+          if KEY_B64.startswith('-----BEGIN'): key_pem = KEY_B64.encode()
+          else:
+              try:
+                  d = base64.b64decode(KEY_B64)
+                  key_pem = d if b'-----BEGIN' in d else KEY_B64.encode()
+              except: key_pem = KEY_B64.encode()
+          pk = serialization.load_pem_private_key(key_pem, password=None)
+          def tk():
+              p = {'iss': ISSUER_ID, 'iat': int(time.time()), 'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'}
+              return jwt.encode(p, pk, algorithm='ES256', headers={'kid': KEY_ID, 'typ': 'JWT'})
+          BASE = 'https://api.appstoreconnect.apple.com/v1'
+          H = lambda ct=False: {'Authorization': f'Bearer {tk()}', 'Content-Type': 'application/json'} if ct else {'Authorization': f'Bearer {tk()}'}
+
+          BUNDLE_ID_INTERNAL = 'B32465TYUA'
+
+          # 1. Habilitar PUSH_NOTIFICATIONS capability
+          print('=== 1) Habilitando PUSH_NOTIFICATIONS ===')
+          body = {
+              "data": {
+                  "type": "bundleIdCapabilities",
+                  "attributes": {"capabilityType": "PUSH_NOTIFICATIONS"},
+                  "relationships": {
+                      "bundleId": {"data": {"type": "bundleIds", "id": BUNDLE_ID_INTERNAL}}
+                  }
+              }
+          }
+          r = requests.post(f'{BASE}/bundleIdCapabilities', headers=H(True), json=body)
+          print(f'Status: {r.status_code}')
+          if r.status_code in (200, 201):
+              cap_data = r.json()['data']
+              print(f'OK: capability creada id={cap_data["id"]}')
+          else:
+              print(f'Body: {r.text[:500]}')
+
+          # 2. Verificar capabilities
+          print('\n=== 2) Verificando capabilities ahora ===')
+          r = requests.get(f'{BASE}/bundleIds/{BUNDLE_ID_INTERNAL}/bundleIdCapabilities?limit=100', headers=H())
+          for c in r.json().get('data', []):
+              print(f'  - {c["attributes"].get("capabilityType")}')
+
+          # 3. Intentar crear una APN Auth Key
+          print('\n=== 3) Creando APN Auth Key ===')
+          # POST /v1/keys necesita name y scopes (APNS)
+          # Pero ojo: parece que solo el "Account Holder" puede crear keys
+          body_key = {
+              "data": {
+                  "type": "keys",
+                  "attributes": {
+                      "name": "GrillaFux APN Key (auto-generated)",
+                      "keyType": "APNS"
+                  }
+              }
+          }
+          r = requests.post(f'{BASE}/keys', headers=H(True), json=body_key)
+          print(f'Status creacion key: {r.status_code}')
+          if r.status_code in (200, 201):
+              key_data = r.json()['data']
+              print(f'OK: key creada id={key_data["id"]}')
+              print(f'    keyId: {key_data["attributes"].get("keyId")}')
+              if key_data["attributes"].get("privateKey"):
+                  print('    privateKey existe (no se muestra)')
+          else:
+              # Si falla, ver el error
+              print(f'Body: {r.text[:1000]}')
+
+          # 4. Listar keys despues
+          print('\n=== 4) Keys disponibles ===')
+          r = requests.get(f'{BASE}/keys?limit=20', headers=H())
+          for k in r.json().get('data', []):
+              attrs = k['attributes']
+              print(f'  - {attrs.get("name")} | keyId={attrs.get("keyId")} | type={attrs.get("keyType")}')
+
+          # 5. Listar profiles - vamos a ver si hay que regenerar
+          print('\n=== 5) Profiles actuales ===')
+          r = requests.get(f'{BASE}/bundleIds/{BUNDLE_ID_INTERNAL}/profiles?limit=10', headers=H())
+          for p in r.json().get('data', []):
+              attrs = p['attributes']
+              print(f'  - {attrs.get("name")} | state={attrs.get("profileState")} | exp={attrs.get("expirationDate", "?")[:10]}')
+          PYEOF
