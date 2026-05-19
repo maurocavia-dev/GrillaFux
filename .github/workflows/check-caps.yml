@@ -1,0 +1,91 @@
+name: Check Capabilities
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: macos-15
+    steps:
+      - name: Install mobileprovision
+        env:
+          MOBILEPROVISION_BASE64: ${{ secrets.MOBILEPROVISION_BASE64 }}
+        run: |
+          mkdir -p /tmp/prof
+          echo "$MOBILEPROVISION_BASE64" | tr -d '\n' | base64 --decode > /tmp/prof/profile.mobileprovision
+          echo "=== Decodificando provisioning profile ==="
+          security cms -D -i /tmp/prof/profile.mobileprovision | tee /tmp/prof/decoded.plist
+          echo
+          echo "=== Resumen ==="
+          /usr/libexec/PlistBuddy -c "Print Name" /tmp/prof/decoded.plist
+          /usr/libexec/PlistBuddy -c "Print Entitlements" /tmp/prof/decoded.plist || true
+
+      - name: Check App ID capabilities via API
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
+          python3 << 'PYEOF'
+          import jwt, time, os, base64, requests
+          from cryptography.hazmat.primitives import serialization
+          KEY_ID = os.environ['API_KEY_ID']
+          ISSUER_ID = os.environ['ISSUER_ID']
+          KEY_B64 = os.environ['API_KEY_BASE64'].strip()
+          if KEY_B64.startswith('-----BEGIN'): key_pem = KEY_B64.encode()
+          else:
+              try:
+                  d = base64.b64decode(KEY_B64)
+                  key_pem = d if b'-----BEGIN' in d else KEY_B64.encode()
+              except: key_pem = KEY_B64.encode()
+          pk = serialization.load_pem_private_key(key_pem, password=None)
+          def tk():
+              p = {'iss': ISSUER_ID, 'iat': int(time.time()), 'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'}
+              return jwt.encode(p, pk, algorithm='ES256', headers={'kid': KEY_ID, 'typ': 'JWT'})
+          BASE = 'https://api.appstoreconnect.apple.com/v1'
+          H = {'Authorization': f'Bearer {tk()}'}
+
+          # Buscar el bundle ID
+          r = requests.get(f'{BASE}/bundleIds?filter[identifier]=com.basquetpass.logistica', headers=H)
+          data = r.json()
+          if not data.get('data'):
+              print('ERROR: bundle id no encontrado')
+              print(r.text[:500])
+              exit(1)
+          bid = data['data'][0]
+          bid_id = bid['id']
+          print(f'Bundle ID: {bid["attributes"]["identifier"]} (id={bid_id}, name={bid["attributes"].get("name")})')
+
+          # Obtener capabilities
+          r = requests.get(f'{BASE}/bundleIds/{bid_id}/bundleIdCapabilities?limit=100', headers=H)
+          caps = r.json().get('data', [])
+          print(f'\n=== Capabilities (total: {len(caps)}) ===')
+          push_enabled = False
+          for c in caps:
+              cap_type = c['attributes'].get('capabilityType', '?')
+              settings = c['attributes'].get('settings', [])
+              print(f'  - {cap_type}')
+              if 'PUSH' in cap_type.upper():
+                  push_enabled = True
+                  if settings:
+                      print(f'    settings: {settings}')
+          print(f'\n>>> PUSH_NOTIFICATIONS habilitada: {push_enabled}')
+
+          # Listar profiles asociados
+          r = requests.get(f'{BASE}/bundleIds/{bid_id}/profiles?limit=10', headers=H)
+          profs = r.json().get('data', [])
+          print(f'\n=== Provisioning Profiles (total: {len(profs)}) ===')
+          for p in profs:
+              print(f'  - {p["attributes"].get("name")} | type={p["attributes"].get("profileType")} | state={p["attributes"].get("profileState")} | exp={p["attributes"].get("expirationDate", "?")}')
+
+          # Listar APN keys
+          r = requests.get(f'{BASE}/keys?limit=20', headers=H)
+          keys = r.json().get('data', [])
+          print(f'\n=== Keys de Apple Developer (total: {len(keys)}) ===')
+          for k in keys:
+              attrs = k['attributes']
+              print(f'  - {attrs.get("name")} (id={k["id"][:20]}) created={attrs.get("createdDate", "?")[:10]}')
+
+          # Si hay endpoint para APN auth keys especificas
+          PYEOF
