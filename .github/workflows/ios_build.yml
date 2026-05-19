@@ -68,8 +68,8 @@ jobs:
       - name: Set version numbers
         run: |
           echo "Overriding Info.plist version..."
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 207" GrillaFux/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.8" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 208" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.6" GrillaFux/Info.plist
           echo "=== VERIFIED INFO.PLIST CONTENT ==="
           cat GrillaFux/Info.plist
           echo "======================================"
@@ -127,7 +127,7 @@ jobs:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           BUNDLE_ID: com.basquetpass.logistica
-          BUILD_NUMBER: "207"
+          BUILD_NUMBER: "208"
         run: |
           python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           python3 << 'PYEOF'
