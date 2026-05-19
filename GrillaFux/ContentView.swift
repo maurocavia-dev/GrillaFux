@@ -6,11 +6,53 @@ import FirebaseMessaging
 struct ContentView: View {
     let urlString = "https://appfux.sytes.net/grilla/"
     @ObservedObject var tokenManager = TokenManager.shared
+    @State private var updateInfo: VersionCheckInfo? = nil
 
     var body: some View {
         WebView(url: URL(string: urlString)!, token: tokenManager.fcmToken)
             .edgesIgnoringSafeArea(.all)
+            .onAppear { checkAppVersion() }
+            .alert("Actualización requerida", isPresented: Binding(
+                get: { updateInfo != nil },
+                set: { if !$0 { updateInfo = nil } }
+            )) {
+                Button("Actualizar") {
+                    if let urlStr = updateInfo?.updateUrl, let url = URL(string: urlStr) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button("Después", role: .cancel) { }
+            } message: {
+                Text(updateInfo?.message ?? "")
+            }
     }
+
+    private func checkAppVersion() {
+        let currentBuild = Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0") ?? 0
+        guard let url = URL(string: "https://appfux.sytes.net/api/min-version") else { return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 10
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let ios = json["ios"] as? [String: Any],
+                  let minBuild = ios["minBuild"] as? Int else { return }
+            if currentBuild < minBuild {
+                let info = VersionCheckInfo(
+                    updateUrl: ios["updateUrl"] as? String ?? "",
+                    message: (ios["message"] as? String ?? "Hay una nueva versión disponible.") + "\n\nTu versión: build \(currentBuild)\nMínima requerida: build \(minBuild)"
+                )
+                DispatchQueue.main.async {
+                    self.updateInfo = info
+                }
+            }
+        }.resume()
+    }
+}
+
+struct VersionCheckInfo {
+    let updateUrl: String
+    let message: String
 }
 
 struct WebView: UIViewRepresentable {
