@@ -35,11 +35,16 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
             options: authOptions,
             completionHandler: { granted, error in
                 logIOSEvent("03_auth_response", "granted=\(granted) err=\(error?.localizedDescription ?? "nil")")
+                if granted {
+                    DispatchQueue.main.async {
+                        application.registerForRemoteNotifications()
+                        logIOSEvent("04_register_called", "registerForRemoteNotifications llamado DESPUES de grant")
+                    }
+                } else {
+                    logIOSEvent("XX_auth_not_granted", "el usuario denego permisos")
+                }
             }
         )
-
-        application.registerForRemoteNotifications()
-        logIOSEvent("04_register_called", "registerForRemoteNotifications llamado")
         return true
     }
 
