@@ -112,7 +112,7 @@ jobs:
       - name: Set version numbers
         run: |
           echo "Overriding Info.plist version..."
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 217" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 218" GrillaFux/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.7" GrillaFux/Info.plist
           echo "=== VERIFIED INFO.PLIST CONTENT ==="
           cat GrillaFux/Info.plist
@@ -164,12 +164,15 @@ jobs:
           cat "$GITHUB_WORKSPACE/GrillaFux/GrillaFux.entitlements"
           echo ""
 
-          # Identidad de codesign
-          IDENTITY=$(security find-identity -v -p codesigning signing_temp.keychain 2>/dev/null | grep "Apple Distribution" | head -1 | awk '{print $2}')
-          echo "IDENTITY: $IDENTITY"
+          # Identidad de codesign (buscar en todos los keychains)
+          echo "=== Identidades disponibles ==="
+          security find-identity -v -p codesigning | head -20
+          IDENTITY=$(security find-identity -v -p codesigning | grep -E "Apple Distribution|iPhone Distribution|iOS Distribution" | head -1 | awk -F'"' '{print $2}')
+          echo "IDENTITY encontrada: $IDENTITY"
           if [ -z "$IDENTITY" ]; then
-            # Fallback: usar el nombre
-            IDENTITY="Apple Distribution"
+            # Hash del cert que usa xcodebuild
+            IDENTITY="E9A5792D5D52D901B7E87B8C8CF16D4CB01042BB"
+            echo "Fallback a hash conocido: $IDENTITY"
           fi
 
           codesign --force --sign "$IDENTITY" \
@@ -233,7 +236,7 @@ jobs:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           BUNDLE_ID: com.basquetpass.logistica
-          BUILD_NUMBER: "217"
+          BUILD_NUMBER: "218"
         run: |
           python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           python3 << 'PYEOF'
