@@ -1,0 +1,94 @@
+name: Regen Profile v2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify capability + delete + recreate profile
+        env:
+          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
+          python3 << 'PYEOF'
+          import jwt, time, os, base64, requests
+          from cryptography.hazmat.primitives import serialization
+          KEY_ID = os.environ['API_KEY_ID']
+          ISSUER_ID = os.environ['ISSUER_ID']
+          KEY_B64 = os.environ['API_KEY_BASE64'].strip()
+          if KEY_B64.startswith('-----BEGIN'): key_pem = KEY_B64.encode()
+          else:
+              try:
+                  d = base64.b64decode(KEY_B64)
+                  key_pem = d if b'-----BEGIN' in d else KEY_B64.encode()
+              except: key_pem = KEY_B64.encode()
+          pk = serialization.load_pem_private_key(key_pem, password=None)
+          def tk():
+              p = {'iss': ISSUER_ID, 'iat': int(time.time()), 'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'}
+              return jwt.encode(p, pk, algorithm='ES256', headers={'kid': KEY_ID, 'typ': 'JWT'})
+          BASE = 'https://api.appstoreconnect.apple.com/v1'
+          H = lambda ct=False: {'Authorization': f'Bearer {tk()}', 'Content-Type': 'application/json'} if ct else {'Authorization': f'Bearer {tk()}'}
+          BID = 'B32465TYUA'
+
+          # 1. Verificar capabilities actuales
+          print('=== Capabilities actuales del bundle ===')
+          r = requests.get(f'{BASE}/bundleIds/{BID}/bundleIdCapabilities?limit=100', headers=H())
+          caps = r.json().get('data', [])
+          has_push = False
+          for c in caps:
+              ct = c['attributes'].get('capabilityType')
+              print(f'  - {ct}')
+              if 'PUSH' in (ct or '').upper(): has_push = True
+          print(f'PUSH habilitado: {has_push}')
+
+          # 2. Si no esta, habilitarla
+          if not has_push:
+              print('\n=== Habilitando PUSH ===')
+              body = {"data": {"type": "bundleIdCapabilities","attributes": {"capabilityType": "PUSH_NOTIFICATIONS"},"relationships": {"bundleId": {"data": {"type": "bundleIds", "id": BID}}}}}
+              r = requests.post(f'{BASE}/bundleIdCapabilities', headers=H(True), json=body)
+              print(f'Status: {r.status_code}')
+              time.sleep(5)
+
+          # 3. Buscar certificate IOS_DISTRIBUTION
+          r = requests.get(f'{BASE}/certificates?limit=20', headers=H())
+          dist_cert_id = None
+          for c in r.json().get('data', []):
+              if c['attributes'].get('certificateType') == 'IOS_DISTRIBUTION':
+                  dist_cert_id = c['id']
+                  print(f'\nCert IOS_DISTRIBUTION: {dist_cert_id}')
+                  break
+
+          # 4. Buscar profile actual y borrarlo
+          r = requests.get(f'{BASE}/profiles?limit=20', headers=H())
+          for p in r.json().get('data', []):
+              a = p['attributes']
+              if a.get('name') == 'GrillaFux Distribution' and a.get('profileType') == 'IOS_APP_STORE':
+                  print(f'\nBorrando profile viejo: {p["id"]} (state={a.get("profileState")})')
+                  r2 = requests.delete(f'{BASE}/profiles/{p["id"]}', headers=H())
+                  print(f'Delete status: {r2.status_code}')
+                  time.sleep(3)
+
+          # 5. Crear nuevo profile (ahora con PUSH propagada)
+          print('\n=== Creando profile nuevo ===')
+          body = {"data": {"type": "profiles","attributes": {"name": "GrillaFux Distribution","profileType": "IOS_APP_STORE"},"relationships": {"bundleId": {"data": {"type": "bundleIds", "id": BID}},"certificates": {"data": [{"type": "certificates", "id": dist_cert_id}]}}}}
+          r = requests.post(f'{BASE}/profiles', headers=H(True), json=body)
+          print(f'Status: {r.status_code}')
+          if r.status_code in (200, 201):
+              data = r.json()['data']
+              print(f'OK: profile {data["id"]} state={data["attributes"].get("profileState")}')
+              # Verificar contenido
+              pc = data['attributes'].get('profileContent', '')
+              if pc:
+                  import base64 as b64
+                  decoded = b64.b64decode(pc)
+                  if b'aps-environment' in decoded:
+                      print('>>> aps-environment ESTA en el profile nuevo')
+                  else:
+                      print('>>> aps-environment NO esta en el profile nuevo')
+          else:
+              print(r.text[:500])
+          PYEOF
