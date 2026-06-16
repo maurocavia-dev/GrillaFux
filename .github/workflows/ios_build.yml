@@ -46,61 +46,14 @@ jobs:
           p12-file-base64: ${{ secrets.P12_BASE64 }}
           p12-password: ${{ secrets.P12_PASSWORD }}
 
-      - name: Download Provisioning Profile from API
-        env:
-          API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      - name: Install Provisioning Profile from secret
         run: |
-          python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          python3 << 'PYEOF'
-          import jwt, time, os, base64, requests
-          from cryptography.hazmat.primitives import serialization
-          KEY_ID = os.environ['API_KEY_ID']
-          ISSUER_ID = os.environ['ISSUER_ID']
-          KEY_B64 = os.environ['API_KEY_BASE64'].strip()
-          if KEY_B64.startswith('-----BEGIN'): key_pem = KEY_B64.encode()
-          else:
-              try:
-                  d = base64.b64decode(KEY_B64)
-                  key_pem = d if b'-----BEGIN' in d else KEY_B64.encode()
-              except: key_pem = KEY_B64.encode()
-          pk = serialization.load_pem_private_key(key_pem, password=None)
-          payload = {'iss': ISSUER_ID, 'iat': int(time.time()), 'exp': int(time.time())+1200, 'aud': 'appstoreconnect-v1'}
-          tk = jwt.encode(payload, pk, algorithm='ES256', headers={'kid': KEY_ID, 'typ': 'JWT'})
-          H = {'Authorization': f'Bearer {tk}'}
-          BASE = 'https://api.appstoreconnect.apple.com/v1'
-
-          # Buscar el profile ACTIVE de GrillaFux Distribution
-          r = requests.get(f'{BASE}/profiles?limit=200', headers=H)
-          target = None
-          for p in r.json().get('data', []):
-              a = p['attributes']
-              if a.get('name') == 'GrillaFux Distribution' and a.get('profileState') == 'ACTIVE' and a.get('profileType') == 'IOS_APP_STORE':
-                  target = p['id']
-                  break
-          if not target:
-              print('ERROR: profile GrillaFux Distribution ACTIVE no encontrado')
-              import sys; sys.exit(1)
-
-          # Obtener contenido
-          r = requests.get(f'{BASE}/profiles/{target}', headers=H)
-          content_b64 = r.json()['data']['attributes']['profileContent']
-          content_bytes = base64.b64decode(content_b64)
-
-          out_path = os.path.expanduser('~/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision')
-          with open(out_path, 'wb') as f:
-              f.write(content_bytes)
-          print(f'OK: profile descargado ({len(content_bytes)} bytes) -> {out_path}')
-          PYEOF
-
-          echo "Validando perfil de provision..."
-          security cms -D -i "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision" > /dev/null
-
+          echo "${{ secrets.MOBILEPROVISION_BASE64 }}" | tr -d '\n' | base64 --decode > "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision"
+          echo "Validando perfil..."
+          security cms -D -i "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision" | grep -A1 "aps-environment" || echo "WARN: aps-environment no encontrado en profile"
           if [ ! -s "$HOME/Library/MobileDevice/Provisioning Profiles/GrillaFux_Distribution.mobileprovision" ]; then
-            echo "Error: El perfil de provision esta vacio."
-            exit 1
+            echo "Error: perfil vacio"; exit 1
           fi
 
       - name: Debug SPM Resolution
@@ -112,7 +65,7 @@ jobs:
       - name: Set version numbers
         run: |
           echo "Overriding Info.plist version..."
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 218" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 219" GrillaFux/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.7" GrillaFux/Info.plist
           echo "=== VERIFIED INFO.PLIST CONTENT ==="
           cat GrillaFux/Info.plist
@@ -134,71 +87,6 @@ jobs:
             -archivePath "$PWD/build/GrillaFux.xcarchive" \
             -exportOptionsPlist exportOptions.plist \
             -exportPath "$PWD/build/output"
-
-      - name: Re-sign IPA with explicit entitlements
-        run: |
-          set -e
-          echo "=== Verificando IPA generado ==="
-          IPA_PATH=$(find "$PWD/build/output" -name "*.ipa" | head -1)
-          echo "IPA_PATH: $IPA_PATH"
-          if [ -z "$IPA_PATH" ]; then echo "No se encontro IPA"; exit 1; fi
-
-          # Extraer
-          WORK=$(mktemp -d)
-          echo "WORK: $WORK"
-          cp "$IPA_PATH" "$WORK/original.ipa"
-          cd "$WORK"
-          unzip -q original.ipa
-
-          APP=$(find Payload -maxdepth 2 -name "*.app" | head -1)
-          echo "APP: $APP"
-
-          # Mostrar entitlements ANTES del re-sign
-          echo ""
-          echo "=== Entitlements ANTES del re-sign ==="
-          codesign -d --entitlements :- "$APP" 2>&1 || true
-
-          # Re-firmar con entitlements explicito
-          echo ""
-          echo "=== Re-firmando con entitlements de $GITHUB_WORKSPACE/GrillaFux/GrillaFux.entitlements ==="
-          cat "$GITHUB_WORKSPACE/GrillaFux/GrillaFux.entitlements"
-          echo ""
-
-          # Identidad de codesign (buscar en todos los keychains)
-          echo "=== Identidades disponibles ==="
-          security find-identity -v -p codesigning | head -20
-          IDENTITY=$(security find-identity -v -p codesigning | grep -E "Apple Distribution|iPhone Distribution|iOS Distribution" | head -1 | awk -F'"' '{print $2}')
-          echo "IDENTITY encontrada: $IDENTITY"
-          if [ -z "$IDENTITY" ]; then
-            # Hash del cert que usa xcodebuild
-            IDENTITY="E9A5792D5D52D901B7E87B8C8CF16D4CB01042BB"
-            echo "Fallback a hash conocido: $IDENTITY"
-          fi
-
-          codesign --force --sign "$IDENTITY" \
-            --entitlements "$GITHUB_WORKSPACE/GrillaFux/GrillaFux.entitlements" \
-            "$APP"
-
-          # Verificar entitlements DESPUES
-          echo ""
-          echo "=== Entitlements DESPUES del re-sign ==="
-          codesign -d --entitlements :- "$APP" 2>&1 || true
-
-          echo ""
-          echo "=== Verificacion explicita ==="
-          if codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "aps-environment"; then
-            echo "OK: aps-environment ESTA en el binario re-firmado"
-          else
-            echo "FAIL: aps-environment NO ESTA todavia"
-            exit 1
-          fi
-
-          # Re-empaquetar IPA
-          echo ""
-          echo "=== Re-empaquetando IPA ==="
-          rm -f original.ipa
-          zip -qr "$IPA_PATH" Payload
-          echo "IPA re-firmado: $IPA_PATH ($(du -h $IPA_PATH | cut -f1))"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
@@ -236,7 +124,7 @@ jobs:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           BUNDLE_ID: com.basquetpass.logistica
-          BUILD_NUMBER: "218"
+          BUILD_NUMBER: "219"
         run: |
           python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           python3 << 'PYEOF'

@@ -37,7 +37,7 @@ targets:
         CODE_SIGN_STYLE: Manual
         SWIFT_VERSION: 5.7
         CODE_SIGN_ENTITLEMENTS: GrillaFux/GrillaFux.entitlements
-        PROVISIONING_PROFILE_SPECIFIER: "GrillaFux Distribution"
+        PROVISIONING_PROFILE_SPECIFIER: "GrillaFux Manual Push"
         # 🔑 Explicit signing for the app target
         CODE_SIGNING_ALLOWED: YES
         CODE_SIGNING_REQUIRED: YES
