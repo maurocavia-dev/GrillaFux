@@ -112,7 +112,7 @@ jobs:
       - name: Set version numbers
         run: |
           echo "Overriding Info.plist version..."
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 214" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 215" GrillaFux/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.7" GrillaFux/Info.plist
           echo "=== VERIFIED INFO.PLIST CONTENT ==="
           cat GrillaFux/Info.plist
@@ -134,6 +134,28 @@ jobs:
             -archivePath "$PWD/build/GrillaFux.xcarchive" \
             -exportOptionsPlist exportOptions.plist \
             -exportPath "$PWD/build/output"
+
+      - name: Verify entitlements in signed app
+        run: |
+          echo "=== Buscando el .app dentro del archive ==="
+          APP_PATH=$(find "$PWD/build/GrillaFux.xcarchive" -name "*.app" -maxdepth 5 | head -1)
+          echo "APP_PATH: $APP_PATH"
+
+          echo ""
+          echo "=== Entitlements del binario firmado ==="
+          codesign -d --entitlements :- "$APP_PATH" 2>&1 || echo "(error al extraer entitlements)"
+
+          echo ""
+          echo "=== Verificacion explicita de aps-environment ==="
+          if codesign -d --entitlements :- "$APP_PATH" 2>/dev/null | grep -q "aps-environment"; then
+            echo "OK: aps-environment ESTA en el binario firmado"
+          else
+            echo "FAIL: aps-environment NO ESTA en el binario firmado"
+          fi
+
+          echo ""
+          echo "=== Info del provisioning profile embedded ==="
+          security cms -D -i "$APP_PATH/embedded.mobileprovision" 2>&1 | grep -A 2 "Entitlements\|aps-environment\|application-identifier" || true
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
@@ -171,7 +193,7 @@ jobs:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           BUNDLE_ID: com.basquetpass.logistica
-          BUILD_NUMBER: "214"
+          BUILD_NUMBER: "215"
         run: |
           python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           python3 << 'PYEOF'
