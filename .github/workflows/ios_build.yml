@@ -112,7 +112,7 @@ jobs:
       - name: Set version numbers
         run: |
           echo "Overriding Info.plist version..."
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 216" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 217" GrillaFux/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.7" GrillaFux/Info.plist
           echo "=== VERIFIED INFO.PLIST CONTENT ==="
           cat GrillaFux/Info.plist
@@ -135,27 +135,67 @@ jobs:
             -exportOptionsPlist exportOptions.plist \
             -exportPath "$PWD/build/output"
 
-      - name: Verify entitlements in signed app
+      - name: Re-sign IPA with explicit entitlements
         run: |
-          echo "=== Buscando el .app dentro del archive ==="
-          APP_PATH=$(find "$PWD/build/GrillaFux.xcarchive" -name "*.app" -maxdepth 5 | head -1)
-          echo "APP_PATH: $APP_PATH"
+          set -e
+          echo "=== Verificando IPA generado ==="
+          IPA_PATH=$(find "$PWD/build/output" -name "*.ipa" | head -1)
+          echo "IPA_PATH: $IPA_PATH"
+          if [ -z "$IPA_PATH" ]; then echo "No se encontro IPA"; exit 1; fi
 
-          echo ""
-          echo "=== Entitlements del binario firmado ==="
-          codesign -d --entitlements :- "$APP_PATH" 2>&1 || echo "(error al extraer entitlements)"
+          # Extraer
+          WORK=$(mktemp -d)
+          echo "WORK: $WORK"
+          cp "$IPA_PATH" "$WORK/original.ipa"
+          cd "$WORK"
+          unzip -q original.ipa
 
+          APP=$(find Payload -maxdepth 2 -name "*.app" | head -1)
+          echo "APP: $APP"
+
+          # Mostrar entitlements ANTES del re-sign
           echo ""
-          echo "=== Verificacion explicita de aps-environment ==="
-          if codesign -d --entitlements :- "$APP_PATH" 2>/dev/null | grep -q "aps-environment"; then
-            echo "OK: aps-environment ESTA en el binario firmado"
-          else
-            echo "FAIL: aps-environment NO ESTA en el binario firmado"
+          echo "=== Entitlements ANTES del re-sign ==="
+          codesign -d --entitlements :- "$APP" 2>&1 || true
+
+          # Re-firmar con entitlements explicito
+          echo ""
+          echo "=== Re-firmando con entitlements de $GITHUB_WORKSPACE/GrillaFux/GrillaFux.entitlements ==="
+          cat "$GITHUB_WORKSPACE/GrillaFux/GrillaFux.entitlements"
+          echo ""
+
+          # Identidad de codesign
+          IDENTITY=$(security find-identity -v -p codesigning signing_temp.keychain 2>/dev/null | grep "Apple Distribution" | head -1 | awk '{print $2}')
+          echo "IDENTITY: $IDENTITY"
+          if [ -z "$IDENTITY" ]; then
+            # Fallback: usar el nombre
+            IDENTITY="Apple Distribution"
           fi
 
+          codesign --force --sign "$IDENTITY" \
+            --entitlements "$GITHUB_WORKSPACE/GrillaFux/GrillaFux.entitlements" \
+            "$APP"
+
+          # Verificar entitlements DESPUES
           echo ""
-          echo "=== Info del provisioning profile embedded ==="
-          security cms -D -i "$APP_PATH/embedded.mobileprovision" 2>&1 | grep -A 2 "Entitlements\|aps-environment\|application-identifier" || true
+          echo "=== Entitlements DESPUES del re-sign ==="
+          codesign -d --entitlements :- "$APP" 2>&1 || true
+
+          echo ""
+          echo "=== Verificacion explicita ==="
+          if codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "aps-environment"; then
+            echo "OK: aps-environment ESTA en el binario re-firmado"
+          else
+            echo "FAIL: aps-environment NO ESTA todavia"
+            exit 1
+          fi
+
+          # Re-empaquetar IPA
+          echo ""
+          echo "=== Re-empaquetando IPA ==="
+          rm -f original.ipa
+          zip -qr "$IPA_PATH" Payload
+          echo "IPA re-firmado: $IPA_PATH ($(du -h $IPA_PATH | cut -f1))"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
@@ -193,7 +233,7 @@ jobs:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           BUNDLE_ID: com.basquetpass.logistica
-          BUILD_NUMBER: "216"
+          BUILD_NUMBER: "217"
         run: |
           python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           python3 << 'PYEOF'
