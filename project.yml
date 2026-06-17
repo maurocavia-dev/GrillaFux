@@ -25,6 +25,8 @@ targets:
         "UISupportedInterfaceOrientations~ipad": [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
     entitlements:
       path: GrillaFux/GrillaFux.entitlements
+      properties:
+        aps-environment: production
     dependencies:
       - package: Firebase
         product: FirebaseMessaging
