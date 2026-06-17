@@ -9,7 +9,7 @@
     <key>provisioningProfiles</key>
     <dict>
         <key>com.basquetpass.logistica</key>
-        <string>GrillaFux Distribution</string>
+        <string>GrillaFux Manual Push</string>
     </dict>
 </dict>
 </plist>
