@@ -65,7 +65,7 @@ jobs:
       - name: Set version numbers
         run: |
           echo "Overriding Info.plist version..."
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 221" GrillaFux/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 222" GrillaFux/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.7" GrillaFux/Info.plist
           echo "=== VERIFIED INFO.PLIST CONTENT ==="
           cat GrillaFux/Info.plist
@@ -88,7 +88,21 @@ jobs:
             -exportOptionsPlist exportOptions.plist \
             -exportPath "$PWD/build/output"
 
-      - name: Upload IPA artifact
+            - name: Verify aps-environment in IPA
+        run: |
+          IPA=$(find "$PWD/build/output" -name "*.ipa" | head -1)
+          WORK=$(mktemp -d); cd "$WORK"; unzip -q "$IPA"
+          APP=$(find Payload -maxdepth 2 -name "*.app" | head -1)
+          echo "=== Entitlements del binario ==="
+          codesign -d --entitlements :- "$APP" 2>&1 || true
+          echo ""
+          if codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "aps-environment"; then
+            echo "RESULTADO: OK - aps-environment ESTA en build 221/222"
+          else
+            echo "RESULTADO: FAIL - aps-environment NO esta"
+          fi
+
+- name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: GrillaFux.ipa
@@ -124,7 +138,7 @@ jobs:
           API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           BUNDLE_ID: com.basquetpass.logistica
-          BUILD_NUMBER: "221"
+          BUILD_NUMBER: "222"
         run: |
           python3 -m pip install --quiet --break-system-packages pyjwt cryptography requests
           python3 << 'PYEOF'
