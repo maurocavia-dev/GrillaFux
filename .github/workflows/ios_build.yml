@@ -3,6 +3,11 @@ name: iOS Build
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'GrillaFux/**'
+      - 'project.yml'
+      - 'exportOptions.plist'
+      - '.github/workflows/ios_build.yml'
   workflow_dispatch:
 
 jobs:
