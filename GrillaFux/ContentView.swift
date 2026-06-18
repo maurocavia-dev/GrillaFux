@@ -75,6 +75,9 @@ struct WebView: UIViewRepresentable {
         let script = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: false)
         config.userContentController.addUserScript(script)
 
+        // Puente: recibir el notif_name elegido en la web y guardarlo en UserDefaults nativo
+        config.userContentController.add(context.coordinator, name: "userIdHandler")
+
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = context.coordinator
         webView.customUserAgent = "GrillaFuxApp/1.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
@@ -122,16 +125,41 @@ struct WebView: UIViewRepresentable {
         URLSession.shared.dataTask(with: req) { _, _, _ in }.resume()
     }
 
-    class Coordinator: NSObject, WKNavigationDelegate {
+    class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
         var parent: WebView
 
         init(_ parent: WebView) {
             self.parent = parent
         }
 
+        // Recibe el notif_name desde la web, lo guarda en UserDefaults y re-registra el token
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == "userIdHandler" else { return }
+            guard let name = message.body as? String, !name.isEmpty else { return }
+            let previous = UserDefaults.standard.string(forKey: "notif_name") ?? ""
+            if name != previous {
+                UserDefaults.standard.set(name, forKey: "notif_name")
+                // Re-registrar el token (si ya lo tenemos) con el userId correcto
+                if let t = TokenManager.shared.fcmToken, !t.isEmpty {
+                    WebView.registerNative(token: t, userId: name)
+                }
+            }
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             // Inyectar token al JS si ya esta disponible (lo guarda el AppDelegate cuando FCM lo entrega)
             parent.injectToken(into: webView)
+
+            // Leer el notif_name del localStorage de la web y mandarlo al handler nativo
+            let readNameJS = """
+                try {
+                    var n = localStorage.getItem('notif_name') || localStorage.getItem('productora_user') || '';
+                    if (n && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.userIdHandler) {
+                        window.webkit.messageHandlers.userIdHandler.postMessage(n);
+                    }
+                } catch(e) {}
+            """
+            webView.evaluateJavaScript(readNameJS, completionHandler: nil)
             // NOTA: NO llamamos a Messaging.messaging().token aqui porque puede ejecutarse
             // antes de que APNs entregue su token. El delegate
             // messaging(_:didReceiveRegistrationToken:) en AppDelegate maneja todo el ciclo:
